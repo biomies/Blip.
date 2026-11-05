@@ -2530,19 +2530,20 @@
             text-decoration: underline;
         }
 
+        /* Mention Dropdown Standar (Untuk Balasan Knot & Modal Desktop) */
         .mention-autocomplete-dropdown {
             position: absolute;
             left: 0;
             right: 0;
             top: 100%;
-            margin-top: 4px;
-            max-height: 200px;
+            margin-top: 6px;
+            max-height: 220px;
             background: #ffffff;
             border: 1px solid var(--border-color);
             border-radius: 12px;
-            box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.15), 0 8px 10px -6px rgba(15, 23, 42, 0.1);
+            box-shadow: 0 12px 30px -4px rgba(15, 23, 42, 0.2);
             overflow-y: auto;
-            z-index: 9999;
+            z-index: 10000;
             padding: 0.35rem;
         }
 
@@ -3427,14 +3428,38 @@
             }
 
             #createThreadModal .mention-autocomplete-dropdown {
-                position: static !important;
-                max-height: 40vh !important;
+                position: fixed !important;
+                left: 0 !important;
+                right: 0 !important;
+                top: auto !important;
+                bottom: 45px !important;
+                width: 100% !important;
+                max-height: 50vh !important;
+                background: #ffffff !important;
                 border: none !important;
-                box-shadow: none !important;
-                border-top: 1px solid var(--border-subtle) !important;
+                border-top: 1px solid var(--border-color) !important;
+                box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08) !important;
                 border-radius: 0 !important;
-                margin-top: 0.5rem !important;
+                margin: 0 !important;
                 padding: 0 !important;
+                z-index: 100000 !important;
+            }
+
+            #createThreadModal .mention-autocomplete-dropdown .mention-item {
+                padding: 0.7rem 1.15rem !important;
+                border-radius: 0 !important;
+                border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important;
+                gap: 0.75rem !important;
+            }
+
+            #createThreadModal .mention-autocomplete-dropdown .mention-item-name {
+                font-size: 0.94rem !important;
+                font-weight: 700 !important;
+            }
+
+            #createThreadModal .mention-autocomplete-dropdown .mention-item-handle {
+                font-size: 0.8rem !important;
+                color: #64748b !important;
             }
 
             .onboarding-card,
