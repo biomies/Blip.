@@ -31,7 +31,7 @@ class PruneExpiredPhotos extends Command
         $now = Carbon::now();
 
         $expiredMessages = BlipMessage::where('type', 'image')
-            ->where('is_saved', false)
+            ->whereNotNull('photo_path')
             ->whereNotNull('expires_at')
             ->where('expires_at', '<=', $now)
             ->get();
@@ -41,7 +41,11 @@ class PruneExpiredPhotos extends Command
             if ($msg->photo_path && Storage::disk('public')->exists($msg->photo_path)) {
                 Storage::disk('public')->delete($msg->photo_path);
             }
-            $msg->update(['photo_path' => null]);
+            // Kosongkan photo_path dan tandai expires_at null agar tidak diproses berulang
+            $msg->update([
+                'photo_path' => null,
+                'expires_at' => null,
+            ]);
             $count++;
         }
 
