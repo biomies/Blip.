@@ -1,0 +1,53 @@
+services:
+  blip-db:
+    image: mysql:8.0
+    container_name: blip-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: blip_db
+      MYSQL_USER: blip_user
+      MYSQL_PASSWORD: blip_password
+      MYSQL_ROOT_PASSWORD: root_password
+    volumes:
+      - blip_mysql_data:/var/lib/mysql
+    networks:
+      - blip-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_password"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  blip-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: blip-app
+    restart: unless-stopped
+    ports:
+      - "8008:8000"
+      - "8088:8080"
+    volumes:
+      - .:/var/www/html
+    environment:
+      - APP_ENV=local
+      - APP_DEBUG=true
+      - DB_CONNECTION=mysql
+      - DB_HOST=blip-db
+      - DB_PORT=3306
+      - DB_DATABASE=blip_db
+      - DB_USERNAME=blip_user
+      - DB_PASSWORD=blip_password
+    depends_on:
+      blip-db:
+        condition: service_healthy
+    networks:
+      - blip-net
+
+networks:
+  blip-net:
+    driver: bridge
+
+volumes:
+  blip_mysql_data:
+    driver: local
