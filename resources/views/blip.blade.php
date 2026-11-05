@@ -8,6 +8,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Blip.</title>
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -660,9 +662,9 @@
                     <div class="threads-compose-main">
                         <div class="threads-compose-username" id="createThreadUsername">Anda</div>
                         <div style="position: relative; width: 100%; flex: 1; display: flex; flex-direction: column;">
-                            <textarea id="createThreadInputContent" class="threads-compose-textarea" rows="3" maxlength="1000" placeholder="Ada apa baru?" required oninput="updateThreadCharCounter(this.value)"></textarea>
+                            <textarea id="createThreadInputContent" class="threads-compose-textarea" rows="4" maxlength="1000" placeholder="Ada apa baru?" required oninput="updateThreadCharCounter(this.value)"></textarea>
                             
-                            <!-- Mention Autocomplete Dropdown -->
+                            <!-- Mention Dropdown -->
                             <div id="createThreadMentionDropdown" class="mention-autocomplete-dropdown" style="display: none;"></div>
                         </div>
                     </div>
@@ -703,5 +705,12 @@
         };
     </script>
     <script src="{{ asset('js/app.js') }}?v={{ time() }}"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch(() => {});
+            });
+        }
+    </script>
 </body>
 </html>

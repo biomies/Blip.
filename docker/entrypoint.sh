@@ -24,9 +24,12 @@ sed -i 's/^pm.min_spare_servers = .*/pm.min_spare_servers = 5/' /etc/php85/php-f
 sed -i 's/^pm.max_spare_servers = .*/pm.max_spare_servers = 15/' /etc/php85/php-fpm.d/www.conf
 
 # Set batas ukuran upload PHP
-echo "upload_max_filesize = 30M" > /usr/local/etc/php/conf.d/uploads.ini
-echo "post_max_size = 35M" >> /usr/local/etc/php/conf.d/uploads.ini
-echo "memory_limit = 256M" >> /usr/local/etc/php/conf.d/uploads.ini
+echo "upload_max_filesize = 30M" > /etc/php85/conf.d/99-uploads.ini
+echo "post_max_size = 35M" >> /etc/php85/conf.d/99-uploads.ini
+echo "memory_limit = 256M" >> /etc/php85/conf.d/99-uploads.ini
+echo "upload_max_filesize = 30M" > /usr/local/etc/php/conf.d/uploads.ini 2>/dev/null || true
+echo "post_max_size = 35M" >> /usr/local/etc/php/conf.d/uploads.ini 2>/dev/null || true
+echo "memory_limit = 256M" >> /usr/local/etc/php/conf.d/uploads.ini 2>/dev/null || true
 
 # Pastikan permission folder storage bisa ditulisi PHP-FPM / web
 mkdir -p /var/www/html/storage/app/public/avatars /var/www/html/storage/app/public/chat_photos /var/www/html/storage/framework/sessions /var/www/html/storage/framework/views /var/www/html/storage/framework/cache
