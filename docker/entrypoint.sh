@@ -23,5 +23,14 @@ sed -i 's/^pm.start_servers = .*/pm.start_servers = 10/' /etc/php85/php-fpm.d/ww
 sed -i 's/^pm.min_spare_servers = .*/pm.min_spare_servers = 5/' /etc/php85/php-fpm.d/www.conf
 sed -i 's/^pm.max_spare_servers = .*/pm.max_spare_servers = 15/' /etc/php85/php-fpm.d/www.conf
 
+# Set batas ukuran upload PHP
+echo "upload_max_filesize = 30M" > /usr/local/etc/php/conf.d/uploads.ini
+echo "post_max_size = 35M" >> /usr/local/etc/php/conf.d/uploads.ini
+echo "memory_limit = 256M" >> /usr/local/etc/php/conf.d/uploads.ini
+
+# Pastikan permission folder storage bisa ditulisi PHP-FPM / web
+mkdir -p /var/www/html/storage/app/public/avatars /var/www/html/storage/app/public/chat_photos /var/www/html/storage/framework/sessions /var/www/html/storage/framework/views /var/www/html/storage/framework/cache
+chmod -R 777 /var/www/html/storage /var/www/html/bootstrap/cache
+
 # Start Supervisor (Nginx + PHP-FPM + Reverb)
 exec /usr/bin/supervisord -c /var/www/html/docker/supervisor/supervisord.conf
