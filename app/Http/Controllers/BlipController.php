@@ -1164,25 +1164,32 @@ class BlipController extends Controller
      */
     private function compressImageToTargetSize(string $sourcePath, string $destinationPath, int $targetBytes = 102400): void
     {
-        $info = getimagesize($sourcePath);
+        // Jika ekstensi GD tidak tersedia di PHP, langsung simpan file aslinya
+        if (!function_exists('imagecreatefromjpeg') && !function_exists('imagecreatefrompng')) {
+            copy($sourcePath, $destinationPath);
+            return;
+        }
+
+        $info = @getimagesize($sourcePath);
         if (!$info) {
             copy($sourcePath, $destinationPath);
             return;
         }
 
         $mime = $info['mime'];
+        $image = null;
         switch ($mime) {
             case 'image/jpeg':
-                $image = @imagecreatefromjpeg($sourcePath);
+                $image = function_exists('imagecreatefromjpeg') ? @imagecreatefromjpeg($sourcePath) : null;
                 break;
             case 'image/png':
-                $image = @imagecreatefrompng($sourcePath);
+                $image = function_exists('imagecreatefrompng') ? @imagecreatefrompng($sourcePath) : null;
                 break;
             case 'image/webp':
                 $image = function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($sourcePath) : null;
                 break;
             case 'image/gif':
-                $image = @imagecreatefromgif($sourcePath);
+                $image = function_exists('imagecreatefromgif') ? @imagecreatefromgif($sourcePath) : null;
                 break;
             default:
                 $image = null;

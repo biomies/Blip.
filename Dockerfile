@@ -17,6 +17,7 @@ RUN sed -i 's/https/http/' /etc/apk/repositories \
     php85-ctype \
     php85-curl \
     php85-mbstring \
+    php85-gd \
     && echo "extension=/usr/lib/php85/modules/pdo_mysql.so" > /usr/local/etc/php/conf.d/pdo_mysql.ini \
     && echo "extension=/usr/lib/php85/modules/pcntl.so" > /usr/local/etc/php/conf.d/pcntl.ini
 
