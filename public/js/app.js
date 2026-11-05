@@ -530,32 +530,37 @@
                     const msg = data.message;
 
                     // Jika chat dengan teman ini sedang terbuka
-                    if (activeChatFriendId && (activeChatFriendId == msg.sender_id || activeChatFriendId == msg.receiver_id)) {
+                    const isChatOpenWithFriend = activeChatFriendId && (
+                        String(activeChatFriendId) === String(msg.sender_id) || 
+                        String(activeChatFriendId) === String(msg.receiver_id)
+                    );
+
+                    if (isChatOpenWithFriend) {
                         const existingIdx = currentChatMessages.findIndex(m => m.id === msg.id);
                         if (existingIdx !== -1) {
                             currentChatMessages[existingIdx] = {
                                 ...msg,
-                                is_me: msg.sender_id == currentUser.id,
+                                is_me: String(msg.sender_id) === String(currentUser.id),
                                 status: 'sent'
                             };
                         } else {
                             currentChatMessages = currentChatMessages.filter(m => !(m.id && String(m.id).startsWith('temp_') && m.message === msg.message));
                             currentChatMessages.push({
                                 ...msg,
-                                is_me: msg.sender_id == currentUser.id,
+                                is_me: String(msg.sender_id) === String(currentUser.id),
                                 status: 'sent'
                             });
                         }
-                        renderMessages(currentChatMessages);
+                        renderMessages(currentChatMessages, true);
 
                         // Jika pesan datang dari teman saat kita sedang membuka chatnya, otomatis tandai terbaca (read receipt)
-                        if (msg.sender_id == activeChatFriendId) {
+                        if (String(msg.sender_id) === String(activeChatFriendId)) {
                             fetch(`/api/blip/messages/${activeChatFriendId}/read`, {
                                 method: 'POST',
                                 headers: getHeaders()
                             }).catch(() => {});
                         }
-                    } else if (msg.sender_id != currentUser.id) {
+                    } else if (String(msg.sender_id) !== String(currentUser.id)) {
                         showToast(`Pesan baru diterima!`, 'info');
                     }
 
