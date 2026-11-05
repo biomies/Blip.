@@ -5,6 +5,12 @@ set -e
 echo "Menunggu MySQL siap..."
 sleep 4
 
+# Cek dan install vendor jika belum ada
+if [ ! -f /var/www/html/vendor/autoload.php ]; then
+    echo "Folder vendor belum ditemukan, menginstall dependensi composer..."
+    composer install --no-interaction --prefer-dist --optimize-autoloader
+fi
+
 # Jalankan migrasi database
 php artisan migrate --force
 
