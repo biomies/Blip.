@@ -11,3 +11,4 @@ Artisan::command('inspire', function () {
 
 Schedule::command('blip:prune-inactive')->daily();
 Schedule::command('blip:prune-notifications')->daily();
+Schedule::command('blip:prune-expired-photos')->everyMinute();
