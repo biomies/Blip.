@@ -757,7 +757,13 @@
                 const data = await res.json();
                 if (data.status === 'success') {
                     currentUser = data.user;
-                    loadNearbyUsers();
+                    if (currentTab === 'friends' || currentTab === 'contacts') {
+                        loadFriends();
+                    } else if (currentTab === 'nearby') {
+                        loadNearbyUsers();
+                    } else if (currentTab === 'threads') {
+                        loadThreads();
+                    }
                 }
             } catch (err) {
                 console.error(err);
