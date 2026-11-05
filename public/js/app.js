@@ -4396,11 +4396,13 @@
                         `;
                     }
 
+                    const threadReplies = data.replies || (t && t.replies) || [];
+
                     if (repliesCountHeader) {
-                        repliesCountHeader.innerText = `Balasan (${(data.replies || []).length})`;
+                        repliesCountHeader.innerText = `Balasan (${threadReplies.length})`;
                     }
 
-                    renderRepliesList(data.replies || []);
+                    renderRepliesList(threadReplies);
 
                     // Focus reply input
                     const replyInput = document.getElementById('threadReplyInput');

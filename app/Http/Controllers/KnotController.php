@@ -393,6 +393,7 @@ class KnotController extends BaseBlipController
                 ],
                 'replies' => $repliesData,
             ],
+            'replies' => $repliesData,
         ]);
     }
 
