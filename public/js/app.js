@@ -2165,11 +2165,9 @@
                             ${captionHtml}
                         `;
                     } else {
-                        // Hitung sisa waktu kedaluwarsa jika ada
+                        // Hitung sisa waktu kedaluwarsa jika ada (hanya jika belum disimpan)
                         let expiryBadge = '';
-                        if (m.is_saved) {
-                            expiryBadge = `<span class="photo-status-badge saved"><i class="fa-solid fa-bookmark"></i> Disimpan</span>`;
-                        } else if (m.expires_at) {
+                        if (!m.is_saved && m.expires_at) {
                             expiryBadge = `<span class="photo-status-badge ephemeral" title="Foto hilang dalam 1 jam jika tidak disimpan"><i class="fa-regular fa-clock"></i> 1 Jam</span>`;
                         }
 
