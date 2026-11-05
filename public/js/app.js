@@ -2219,18 +2219,11 @@
                             ${captionHtml}
                         `;
                     } else {
-                        // Hitung sisa waktu kedaluwarsa jika ada (hanya jika belum disimpan)
+                        // Badge kedaluwarsa 1 jam mutlak
                         let expiryBadge = '';
-                        if (!m.is_saved && m.expires_at) {
-                            expiryBadge = `<span class="photo-status-badge ephemeral" title="Foto hilang dalam 1 jam jika tidak disimpan"><i class="fa-regular fa-clock"></i> 1 Jam</span>`;
+                        if (m.expires_at) {
+                            expiryBadge = `<span class="photo-status-badge ephemeral" title="Foto otomatis hangus dan hilang dalam 1 jam"><i class="fa-regular fa-clock"></i> 1 Jam</span>`;
                         }
-
-                        // Tombol simpan foto
-                        const saveBtnHtml = (!m.is_saved && isRealMessage) ? `
-                            <button type="button" class="photo-save-btn" onclick="saveReceivedPhoto(event, ${m.id})" title="Simpan permanen agar tidak terhapus">
-                                <i class="fa-solid fa-bookmark"></i> Simpan
-                            </button>
-                        ` : '';
 
                         bubbleContentHtml = `
                             <div class="server-photo-card">
@@ -2238,7 +2231,6 @@
                                     <img src="${m.photo_url}" class="server-photo-img" onclick="openImageLightbox('${m.photo_url}')" alt="Foto Obrolan" loading="lazy">
                                     <div class="photo-overlay-badges">
                                         ${expiryBadge}
-                                        ${saveBtnHtml}
                                     </div>
                                 </div>
                                 <div class="photo-meta-bar">
