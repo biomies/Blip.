@@ -415,8 +415,7 @@
         </div>
     </div>
 
-    <!-- Toast container -->
-    <div class="toast-container" id="toastContainer"></div>
+
 
     <!-- Onboarding Modal: Setup Akun Awal (Nama, Username Unik, Jenis Kelamin) -->
     <div id="onboardingModal" class="onboarding-overlay" style="display: none;">
