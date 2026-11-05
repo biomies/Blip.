@@ -32,22 +32,41 @@
                     Blip.
                 </div>
                 
-                <button type="button" class="tg-nav-btn active" id="tabFriendsNavBtn" onclick="switchTab('friends')" title="Percakapan Chat">
-                    <i class="fa-solid fa-comments"></i>
-                    <span class="tg-nav-label">Chat</span>
-                    <span class="badge-count" id="unreadMessagesBadge" style="display:none;">0</span>
-                </button>
+                <x-nav-item
+                    id="tabFriendsNavBtn"
+                    label="Chat"
+                    icon="fa-solid fa-comments"
+                    :active="true"
+                    badgeId="unreadMessagesBadge"
+                    title="Percakapan Chat"
+                    onclick="switchTab('friends')"
+                />
 
-                <button type="button" class="tg-nav-btn" id="tabContactsNavBtn" onclick="switchTab('contacts')" title="Daftar Teman (Friend List)">
-                    <i class="fa-solid fa-user-group"></i>
-                    <span class="tg-nav-label">Teman</span>
-                    <span class="badge-count" id="friendRequestBadge" style="display:none;">0</span>
-                </button>
+                <x-nav-item
+                    id="tabContactsNavBtn"
+                    label="Teman"
+                    icon="fa-solid fa-user-group"
+                    badgeId="friendRequestBadge"
+                    title="Daftar Teman (Friend List)"
+                    onclick="switchTab('contacts')"
+                />
 
-                <button type="button" class="tg-nav-btn" id="tabNearbyNavBtn" onclick="switchTab('nearby')" title="Radar Orang di Sekitar">
-                    <i class="fa-solid fa-tower-broadcast"></i>
-                    <span class="tg-nav-label">Sekitar</span>
-                </button>
+                <x-nav-item
+                    id="tabNearbyNavBtn"
+                    label="Sekitar"
+                    icon="fa-solid fa-tower-broadcast"
+                    title="Radar Orang di Sekitar"
+                    onclick="switchTab('nearby')"
+                />
+
+                <x-nav-item
+                    id="tabThreadsNavBtn"
+                    label="Knot"
+                    customIcon="knot-icon-mask"
+                    badgeId="unreadThreadsBadge"
+                    title="Knot & Postingan Sekitar"
+                    onclick="switchTab('threads')"
+                />
             </div>
 
             <div class="tg-nav-bottom">
@@ -66,13 +85,40 @@
             <div id="chatsSidebarContent" style="display: flex; flex-direction: column; height: 100%; width: 100%;">
                 <!-- Search & Actions Header -->
                 <div class="tg-search-header">
-                    <div class="tg-search-box">
-                        <i class="fa-solid fa-magnifying-glass tg-search-icon"></i>
-                        <input type="text" id="searchInput" class="tg-search-input" placeholder="Cari riwayat percakapan..." oninput="handleSearchFilter(this.value)">
-                    </div>
+                    <form class="tg-search-box" id="searchHeaderForm" onsubmit="handleSearchSubmit(event)">
+                        <button type="submit" class="tg-search-btn-trigger" id="btnSearchTrigger" title="Cari">
+                            <i class="fa-solid fa-magnifying-glass tg-search-icon"></i>
+                        </button>
+                        <input type="text" id="searchInput" class="tg-search-input" placeholder="Cari riwayat percakapan..." oninput="handleSearchInputChange(this.value)">
+                        <button type="button" class="tg-search-clear-btn" id="btnSearchClear" onclick="clearSearchInput()" style="display: none;" title="Hapus Pencarian">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </form>
+                    <button type="button" class="tg-refresh-btn" id="btnOpenNewThread" onclick="openCreateThreadModal()" style="display: none; background: var(--primary); color: #ffffff; border-color: var(--primary);" title="Buat Knot Baru">
+                        <i class="fa-solid fa-pen-to-square"></i>
+                    </button>
+                    <button type="button" class="tg-refresh-btn" id="btnThreadNotifsToggle" onclick="toggleThreadNotificationsDropdown(event)" style="display: none; position: relative;" title="Notifikasi Knot & Mention">
+                        <i class="fa-regular fa-bell"></i>
+                        <span class="badge-count" id="headerThreadNotifBadge" style="display: none; top: -4px; right: -4px; font-size: 0.65rem; min-width: 16px; height: 16px;">0</span>
+                    </button>
                     <button type="button" class="tg-refresh-btn" id="btnRefreshNearby" onclick="refreshNearbyManual()" title="Pindai Ulang Radar Sekitar">
                         <i class="fa-solid fa-arrows-rotate" id="refreshIcon"></i>
                     </button>
+
+                    <!-- Dropdown Notifikasi Thread/Knot -->
+                    <div id="threadNotifsDropdownMenu" class="thread-notifs-dropdown" style="display: none;">
+                        <div class="thread-notifs-header">
+                            <span style="font-weight: 700; font-size: 0.88rem; color: var(--text-main);">Notifikasi Knot</span>
+                            <button type="button" class="thread-notifs-mark-read" onclick="markAllThreadNotifsAsRead()" title="Tandai semua dibaca">
+                                <i class="fa-solid fa-check-double"></i> Tandai Dibaca
+                            </button>
+                        </div>
+                        <div class="thread-notifs-list" id="threadNotifsListContainer">
+                            <div style="text-align: center; padding: 1.5rem; color: var(--text-muted); font-size: 0.82rem;">
+                                Memuat notifikasi...
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Tabs Pill Filter (Semua, Wanita, Pria) -->
@@ -97,61 +143,110 @@
                 </div>
             </div>
 
-            <!-- Inline Profile Panel (Replaces Modal Popup) -->
-            <div id="inlineProfileView" style="display: none; flex-direction: column; height: 100%; width: 100%;">
-                <div class="tg-search-header" style="justify-content: space-between; flex-shrink: 0;">
+            <!-- Inline Profile Panel (Threads Clean Style Profile & Postings) -->
+            <div id="inlineProfileView" style="display: none; flex-direction: column; height: 100%; width: 100%; background: var(--bg-main);">
+                <!-- Profile Header Bar -->
+                <div class="tg-search-header" style="justify-content: space-between; flex-shrink: 0; border-bottom: 1px solid var(--border-color); padding: 0.6rem 0.85rem; height: 52px;">
                     <div style="display: flex; align-items: center; gap: 0.6rem;">
-                        <button type="button" class="tg-refresh-btn" onclick="closeProfileModal()" title="Kembali ke Daftar">
+                        <button type="button" class="tg-refresh-btn" onclick="closeProfileModal()" title="Kembali">
                             <i class="fa-solid fa-arrow-left"></i>
                         </button>
-                        <span style="font-weight: 700; font-size: 1rem; color: var(--text-main);">Profil Akun</span>
+                        <span style="font-weight: 700; font-size: 0.95rem; color: var(--text-main);">Profil Saya</span>
                     </div>
                 </div>
 
-                <!-- Scrollable Body with flex column to push delete button to absolute bottom -->
-                <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 1.25rem 1rem; display: flex; flex-direction: column;">
-                    <div style="flex: 1;">
-                        <!-- Avatar Preview -->
-                        <div style="display: flex; flex-direction: column; align-items: center; margin-bottom: 1.25rem;">
-                            <div class="profile-avatar-wrapper">
-                                <div id="profileAvatarPreview" class="tg-my-avatar" style="width: 80px; height: 80px; font-size: 1.9rem; border-radius: 50%; overflow: hidden; display: flex; align-items: center; justify-content: center; background-position: center; background-size: cover;">
-                                    B
+                <!-- Scrollable Profile View -->
+                <div style="flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column;">
+                    <!-- Threads Style Profile Header Area -->
+                    <div class="threads-profile-header-area">
+                        <div class="threads-profile-top-row">
+                            <!-- Left: Avatar with Single Camera Badge & Dropdown -->
+                            <div class="threads-avatar-wrap" style="position: relative;">
+                                <div class="profile-avatar-wrapper" style="position: relative; width: 64px; height: 64px;">
+                                    <div id="profileAvatarPreview" class="threads-profile-avatar-img">
+                                        B
+                                    </div>
+                                    <button type="button" class="avatar-badge-btn change-photo-badge" onclick="toggleAvatarDropdown(event)" title="Kelola Foto Profil">
+                                        <i class="fa-solid fa-camera"></i>
+                                    </button>
+                                    <input type="file" id="inputAvatarFile" accept="image/*" style="display: none;" onchange="onAvatarFileSelected(event)">
                                 </div>
-                                <label for="inputAvatarFile" class="avatar-badge-btn change-photo-badge" title="Ganti Foto Profil">
-                                    <i class="fa-solid fa-camera"></i>
-                                </label>
-                                <button type="button" id="btnDeleteAvatarBadge" class="avatar-badge-btn remove-photo-badge" onclick="confirmRemoveAvatar()" title="Hapus Foto Profil" style="display: none;">
-                                    <i class="fa-solid fa-trash-can"></i>
-                                </button>
-                                <input type="file" id="inputAvatarFile" accept="image/*" style="display: none;" onchange="onAvatarFileSelected(event)">
+
+                                <!-- Dropdown Menu Foto Profil -->
+                                <div id="avatarOptionsMenuDropdown" class="avatar-options-dropdown" style="display: none;">
+                                    <button type="button" class="avatar-dropdown-item" onclick="onAvatarDropdownUploadClick()">
+                                        <i class="fa-solid fa-cloud-arrow-up" style="color: var(--primary);"></i>
+                                        <span>Ganti Foto</span>
+                                    </button>
+                                    <button type="button" id="avatarDropdownDeleteBtn" class="avatar-dropdown-item danger" onclick="onAvatarDropdownDeleteClick()" style="display: none;">
+                                        <i class="fa-solid fa-trash-can"></i>
+                                        <span>Hapus Foto</span>
+                                    </button>
+                                </div>
                             </div>
-                            <span id="profileNamePreview" style="font-weight: 700; font-size: 1rem; color: var(--text-main); margin-top: 0.25rem;">Akun Saya</span>
-                            <span id="profileUsernamePreview" style="font-size: 0.8rem; color: var(--primary); font-weight: 600; margin-top: 1px;">@username</span>
+
+                            <!-- Right: Names & Username -->
+                            <div class="threads-profile-info-col">
+                                <h2 id="profileNamePreview" class="threads-display-name">Akun Saya</h2>
+                                <div id="profileUsernamePreview" class="threads-handle">@username</div>
+                            </div>
                         </div>
 
+                        <!-- User Bio -->
+                        <p id="profileBioDisplay" class="threads-bio-text">Tulis bio Anda untuk memperkenalkan diri...</p>
+
+                        <!-- User Meta Details (Gender, Age, Joined) -->
+                        <div class="twitter-profile-meta-list" style="margin-top: 0.4rem;">
+                            <div class="twitter-meta-item" id="profileMetaGenderWrap" style="display: none;">
+                                <i class="fa-solid fa-mars-and-venus"></i>
+                                <span id="profileMetaGender">-</span>
+                            </div>
+                            <div class="twitter-meta-item" id="profileMetaAgeWrap" style="display: none;">
+                                <i class="fa-solid fa-cake-candles"></i>
+                                <span id="profileMetaAge">-</span>
+                            </div>
+                            <div class="twitter-meta-item">
+                                <i class="fa-regular fa-calendar"></i>
+                                <span id="profileMetaJoined">Bergabung baru-baru ini</span>
+                            </div>
+                        </div>
+
+                        <!-- Action Button: Edit Profil (Full Width ala Threads) -->
+                        <div style="margin-top: 0.85rem; width: 100%;">
+                            <button type="button" class="threads-btn-action edit-profile" id="btnToggleEditProfile" onclick="toggleEditProfileSection()">
+                                <i class="fa-solid fa-pen"></i> <span>Edit Profil</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- TAB 1: Daftar Knot Milik User Langsung -->
+                    <div id="profileKnotsTabContent" style="display: flex; flex-direction: column; flex: 1;">
+                        <div id="profileKnotsList" class="profile-knots-container">
+                            <!-- Populated via JavaScript -->
+                        </div>
+                    </div>
+
+                    <!-- TAB 2: Form Edit Profil & Hapus Akun (Muncul saat tombol Edit Profil ditekan) -->
+                    <div id="profileEditTabContent" style="display: none; padding: 1.25rem 1rem; flex-direction: column; flex: 1;">
                         <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 1.25rem; line-height: 1.4; background: var(--item-hover); padding: 0.65rem 0.85rem; border-radius: 8px;">
                             <i class="fa-solid fa-circle-info" style="color: var(--primary); margin-right: 4px;"></i>
-                            Jika tidak ada aktivitas selama 1 bulan, akun akan dihapus.
+                            Jika tidak ada aktivitas selama 1 bulan, akun akan dihapus otomatis.
                         </p>
 
                         <form onsubmit="handleUpdateProfile(event)">
                             <!-- 1. Nama -->
                             <div class="form-group">
                                 <label>Nama Anda</label>
-                                <input type="text" id="inputProfileName" class="form-input" required maxlength="50" placeholder="Masukkan nama panggilan..." oninput="updateProfilePreviewName(this.value)">
+                                <input type="text" id="inputProfileName" class="form-input" required maxlength="50" placeholder="Masukkan nama panggilan..." oninput="onProfileNameChange(this.value)">
+                                <div id="profileNameErrorStatus" style="font-size: 0.75rem; margin-top: 4px; display: none;"></div>
                             </div>
 
-                            <!-- 2. Username (Twitter Handle style) -->
-                            <div class="form-group">
-                                <label style="display: flex; justify-content: space-between; align-items: center;">
-                                    <span>Username</span>
-                                    <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: normal;">Huruf, angka, _ (3-25 karakter)</span>
-                                </label>
-                                <div class="tg-username-input-wrap">
-                                    <span class="tg-username-prefix">@</span>
-                                    <input type="text" id="inputProfileUsername" class="form-input tg-username-input" required minlength="3" maxlength="25" placeholder="username" autocomplete="off" spellcheck="false" oninput="updateProfilePreviewUsername(this.value)">
-                                </div>
-                            </div>
+                            <!-- 2. Username (Twitter Handle style) via Component -->
+                            <x-username-input
+                                id="inputProfileUsername"
+                                statusId="profileUsernameStatus"
+                                oninput="onProfileUsernameChange(this.value)"
+                            />
 
                             <!-- 3. Bio -->
                             <div class="form-group">
@@ -162,7 +257,7 @@
                                 <textarea id="inputProfileBio" class="form-input" rows="2" maxlength="160" placeholder="Tulis sedikit tentang diri Anda..." style="resize: none; font-size: 0.85rem; line-height: 1.4; padding: 0.5rem 0.65rem;" oninput="updateProfileBioCounter(this.value)" onkeydown="if(event.key === 'Enter'){ event.preventDefault(); }"></textarea>
                             </div>
 
-                            <!-- 3. Jenis Kelamin dan Tanggal Lahir -->
+                            <!-- 4. Jenis Kelamin dan Tanggal Lahir -->
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1.25rem;">
                                 <div>
                                     <label style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.4rem; font-weight: 600;">Jenis Kelamin</label>
@@ -187,17 +282,17 @@
                             </div>
 
                             <div style="display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.5rem;">
-                                <x-button variant="outline" size="sm" onclick="closeProfileModal()">Batal</x-button>
-                                <x-button type="submit" variant="primary" size="sm">Simpan</x-button>
+                                <x-button variant="outline" size="sm" onclick="switchProfileSubTab('knots')">Batal</x-button>
+                                <x-button type="submit" variant="primary" size="sm">Simpan Perubahan</x-button>
                             </div>
                         </form>
-                    </div>
 
-                    <!-- Paling Bawah Mentok (Sticky/Pushed to bottom): Tombol Hapus Akun Merah Simple -->
-                    <div style="margin-top: auto; padding-top: 1.5rem; border-top: 1px dashed var(--border-color); flex-shrink: 0;">
-                        <button type="button" onclick="confirmDeleteAccount()" style="width: 100%; padding: 0.65rem 1rem; background: #ef4444; color: #ffffff; border: none; border-radius: 8px; font-weight: 600; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; transition: background 0.15s ease;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">
-                            <i class="fa-solid fa-trash-can"></i> Hapus Akun
-                        </button>
+                        <!-- Paling Bawah Mentok: Tombol Hapus Akun -->
+                        <div style="margin-top: auto; padding-top: 2rem; border-top: 1px dashed var(--border-color); flex-shrink: 0;">
+                            <button type="button" onclick="confirmDeleteAccount()" style="width: 100%; padding: 0.65rem 1rem; background: #ef4444; color: #ffffff; border: none; border-radius: 8px; font-weight: 600; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; transition: background 0.15s ease;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">
+                                <i class="fa-solid fa-trash-can"></i> Hapus Akun
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -315,64 +410,124 @@
                     </button>
                 </div>
             </div>
+
+            <!-- Active Thread Interface (Diskusi Publik & Balasan) -->
+            <div id="activeThreadInterface" style="display: none; height: 100%; flex-direction: column;">
+                <!-- Header -->
+                <div class="chat-header">
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span class="knot-icon-mask" style="color: var(--primary); width: 24px; height: 24px; display: inline-block;"></span>
+                    </div>
+                    <button type="button" class="header-icon-btn" onclick="closeThreadView()" title="Tutup">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <!-- Scrollable Body for Thread & Replies -->
+                <div class="chat-body thread-detail-body" id="threadDetailBody">
+                    <div class="thread-detail-container">
+                        <div id="threadOriginalPostContainer"></div>
+                        <div class="thread-replies-divider" id="threadRepliesDivider">
+                            <span style="font-size: 0.85rem; font-weight: 700; color: var(--text-main);" id="threadRepliesHeaderCount">Balasan (0)</span>
+                            <div style="flex: 1; height: 1px; background: var(--border-color);"></div>
+                        </div>
+                        <div id="threadRepliesListContainer" style="display: flex; flex-direction: column; gap: 0.75rem;"></div>
+                    </div>
+                </div>
+
+                <!-- Reply Input Bar -->
+                <form class="chat-input-bar thread-reply-input-bar" id="threadReplyForm" onsubmit="handleSendReply(event)">
+                    <div class="thread-reply-input-wrapper" style="position: relative;">
+                        <!-- Mention Autocomplete Dropdown for Reply -->
+                        <div id="threadReplyMentionDropdown" class="mention-autocomplete-dropdown" style="display: none; bottom: 100%; top: auto; margin-bottom: 8px;"></div>
+                        
+                        <input type="text" id="threadReplyInput" class="chat-input" placeholder="Tulis balasan untuk knot ini... (ketik @ untuk mention)" autocomplete="off" maxlength="1000" required>
+                        <button type="submit" class="tg-send-action-btn" title="Kirim Balasan">
+                            <i class="fa-regular fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </form>
+            </div>
         </main>
 
-        <!-- 4. Fourth Column: Right Contact Info Panel (Telegram Desktop Profile Pane) -->
+        <!-- 4. Fourth Column: Right Contact Info Panel (Threads Clean Style Profile - No Banner Header) -->
         <aside class="tg-info-panel" id="contactInfoPanel">
-            <div class="tg-info-header">
-                <span style="font-weight: 700; font-size: 0.95rem;">Info Pengguna</span>
-                <button type="button" class="header-icon-btn" onclick="toggleContactInfoPanel()" title="Tutup Info">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
+            <!-- Header Bar with Title, Options Menu, and Close Button -->
+            <div class="tg-info-header" style="justify-content: space-between; flex-shrink: 0; border-bottom: 1px solid var(--border-color); padding: 0.6rem 0.85rem; height: 52px; position: relative;">
+                <div style="display: flex; align-items: center; gap: 0.6rem;">
+                    <span style="font-weight: 700; font-size: 0.95rem; color: var(--text-main);">Info Pengguna</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.35rem; position: relative;">
+                    <!-- Dropdown Button Titik Tiga (Opsi Teman ala foto) -->
+                    <button type="button" class="header-icon-btn" id="btnInfoPanelMenu" onclick="toggleInfoPanelDropdownMenu(event)" title="Opsi pengguna" style="display: none;">
+                        <i class="fa-solid fa-ellipsis-vertical"></i>
+                    </button>
+
+                    <!-- Dropdown Menu Opsi Teman -->
+                    <div class="user-card-dropdown" id="infoPanelDropdownMenu" style="top: 42px; right: 35px; width: 185px;" onclick="event.stopPropagation()">
+                        <button type="button" class="message-menu-item" onclick="onInfoPanelClearChatClicked()">
+                            <i class="fa-solid fa-eraser" style="color: var(--primary);"></i>
+                            <span>Hapus riwayat chat</span>
+                        </button>
+                        <button type="button" class="message-menu-item danger" onclick="onInfoPanelRemoveFriendClicked()">
+                            <i class="fa-solid fa-user-xmark" style="color: var(--danger);"></i>
+                            <span>Hapus teman</span>
+                        </button>
+                    </div>
+
+                    <button type="button" class="header-icon-btn" onclick="toggleContactInfoPanel()" title="Tutup Info">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
             </div>
 
-            <div class="tg-info-content">
-                <div class="tg-info-avatar-wrap">
-                    <div class="tg-info-avatar" id="infoPanelAvatar">U</div>
-                    <h3 class="tg-info-name" id="infoPanelName">Nama Teman</h3>
-                    <div id="infoPanelUsername" style="font-size: 0.85rem; color: var(--primary); font-weight: 600; margin-top: 2px;"></div>
-                    <div class="tg-info-status" id="infoPanelDist" style="margin-top: 0.35rem;">
-                        <i class="fa-solid fa-location-arrow"></i> <span>0 m</span>
+            <!-- Scrollable Content -->
+            <div style="flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column;">
+                <!-- Profile Area: Clean Threads Style -->
+                <div class="threads-profile-header-area">
+                    <div class="threads-profile-top-row">
+                        <!-- Left: Avatar -->
+                        <div class="threads-avatar-wrap">
+                            <div class="threads-profile-avatar-img" id="infoPanelAvatar">
+                                U
+                            </div>
+                        </div>
+
+                        <!-- Right: Names & Username -->
+                        <div class="threads-profile-info-col">
+                            <h2 class="threads-display-name" id="infoPanelName">Nama Teman</h2>
+                            <div class="threads-handle" id="infoPanelUsername">@username</div>
+                        </div>
                     </div>
-                    <div id="infoPanelAddFriendWrap" style="margin-top: 0.75rem; width: 100%; display: none; justify-content: center;"></div>
+
+                    <!-- Bio Text (Threads Style) -->
+                    <p class="threads-bio-text" id="infoPanelBio">-</p>
+
+                    <!-- Meta Details: Location/Distance, Age, Gender -->
+                    <div class="twitter-profile-meta-list" style="margin-top: 0.4rem;">
+                        <div class="twitter-meta-item" id="infoPanelMetaDist">
+                            <i class="fa-solid fa-location-dot" style="color: var(--primary);"></i>
+                            <span id="infoPanelLocation">0 m</span>
+                        </div>
+                        <div class="twitter-meta-item" id="infoPanelMetaGenderWrap" style="display: none;">
+                            <i class="fa-solid fa-mars-and-venus"></i>
+                            <span id="infoPanelGender">-</span>
+                        </div>
+                        <div class="twitter-meta-item" id="infoPanelMetaAgeWrap" style="display: none;">
+                            <i class="fa-solid fa-cake-candles"></i>
+                            <span id="infoPanelAge">-</span>
+                        </div>
+                    </div>
+
+                    <!-- Full-Width Action Button (Add Friend / Unfriend) -->
+                    <div id="infoPanelAddFriendWrap" style="margin-top: 0.85rem; width: 100%;"></div>
                 </div>
 
-                <div class="tg-info-section">
-                    <div class="tg-info-item">
-                        <div class="tg-info-icon"><i class="fa-regular fa-comment-dots"></i></div>
-                        <div class="tg-info-text">
-                            <span class="tg-info-val" id="infoPanelBio" style="white-space: normal; line-height: 1.4;">-</span>
-                            <span class="tg-info-lbl">Bio</span>
-                        </div>
+                <!-- Feed Postingan Knot Pengguna Langsung (Clean Threads/Twitter Style) -->
+                <div style="display: flex; flex-direction: column; flex: 1;">
+                    <div id="infoPanelKnotsList" class="profile-knots-container">
+                        <!-- Postingan pengguna dirender di sini via JS -->
                     </div>
-                    <div class="tg-info-item">
-                        <div class="tg-info-icon"><i class="fa-solid fa-mars-and-venus"></i></div>
-                        <div class="tg-info-text">
-                            <span class="tg-info-val" id="infoPanelGender">-</span>
-                            <span class="tg-info-lbl">Jenis Kelamin</span>
-                        </div>
-                    </div>
-                    <div class="tg-info-item">
-                        <div class="tg-info-icon"><i class="fa-solid fa-cake-candles"></i></div>
-                        <div class="tg-info-text">
-                            <span class="tg-info-val" id="infoPanelAge">-</span>
-                            <span class="tg-info-lbl">Usia</span>
-                        </div>
-                    </div>
-                    <div class="tg-info-item">
-                        <div class="tg-info-icon"><i class="fa-solid fa-location-arrow"></i></div>
-                        <div class="tg-info-text">
-                            <span class="tg-info-val" id="infoPanelLocation">-</span>
-                            <span class="tg-info-lbl">Jarak</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="tg-info-actions">
-                    <button type="button" class="tg-action-row danger" onclick="onHeaderClearChatClicked()">
-                        <i class="fa-solid fa-trash-can"></i>
-                        <span>Hapus Riwayat Chat</span>
-                    </button>
                 </div>
             </div>
         </aside>
@@ -480,6 +635,64 @@
             </form>
         </div>
     </div>
+
+    <!-- Modal: Buat Knot Publik Baru (Simple Threads/Twitter Compose Style) -->
+    <div id="createThreadModal" class="onboarding-overlay" style="display: none;" onclick="if(event.target === this) closeCreateThreadModal()">
+        <div class="threads-compose-modal">
+            <!-- Header bar -->
+            <div class="threads-compose-header">
+                <button type="button" class="threads-compose-cancel-btn" onclick="closeCreateThreadModal()">Batal</button>
+                <span class="threads-compose-title">Knot baru</span>
+                <div style="width: 45px;"></div>
+            </div>
+
+            <form onsubmit="handleCreateThreadSubmit(event)" style="display: flex; flex-direction: column; flex: 1;">
+                <!-- Main Body: Avatar + Content Area -->
+                <div class="threads-compose-body">
+                    <div id="createThreadUserAvatar" class="threads-compose-avatar">
+                        <!-- Rendered by JS or default placeholder -->
+                        <div class="avatar-circle" style="width: 40px; height: 40px; font-size: 1rem;">U</div>
+                    </div>
+                    <div class="threads-compose-main">
+                        <div class="threads-compose-username" id="createThreadUsername">Anda</div>
+                        <div style="position: relative; width: 100%;">
+                            <textarea id="createThreadInputContent" class="threads-compose-textarea" rows="3" maxlength="1000" placeholder="Ada apa baru?" required oninput="updateThreadCharCounter(this.value)"></textarea>
+                            
+                            <!-- Mention Autocomplete Dropdown -->
+                            <div id="createThreadMentionDropdown" class="mention-autocomplete-dropdown" style="display: none;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer: Attachment / Location & Submit Button -->
+                <div class="threads-compose-footer">
+                    <div class="threads-compose-meta">
+                        <span id="createThreadLocationBadge" class="threads-compose-loc" title="Jarak relatif Anda">
+                            <i class="fa-solid fa-location-arrow"></i> <span>Lokasi terhubung</span>
+                        </span>
+                        <span id="createThreadCharCounter" class="threads-compose-counter">0/1000</span>
+                    </div>
+                    <button type="submit" class="threads-compose-submit-btn" id="btnSubmitNewThread">
+                        Posting
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Pengguna yang Menyukai Knot (Likes List Modal via Reusable Component) -->
+    <x-modal
+        id="threadLikesModal"
+        title="Disukai oleh"
+        maxWidth="380px"
+        onClose="closeThreadLikesModal()"
+    >
+        <div class="thread-likes-list" id="threadLikesListContainer" style="max-height: 380px; overflow-y: auto;">
+            <div style="text-align: center; padding: 2rem 1rem; color: var(--text-muted); font-size: 0.85rem;">
+                <i class="fa-solid fa-spinner fa-spin"></i> Memuat daftar...
+            </div>
+        </div>
+    </x-modal>
 
     <script>
         window.BLIP_CONFIG = {

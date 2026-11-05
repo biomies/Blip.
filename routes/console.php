@@ -10,3 +10,4 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('blip:prune-inactive')->daily();
+Schedule::command('blip:prune-notifications')->daily();

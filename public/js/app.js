@@ -112,7 +112,65 @@
             return '';
         }
 
-        // Helper untuk me-render avatar (foto profil jika ada, atau inisial nama + warna)
+        // Helper terpadu untuk render kartu postingan Knot (dipakai di Feed Utama, Profil Saya, dan Profil Pengguna Lain)
+        function renderKnotCardHtml(t, options = {}) {
+            const u = t.user || {};
+            const isMy = t.is_mine;
+            const isLiked = t.is_liked;
+            const genderIcon = renderGenderIcon(u.gender);
+            const ageBadge = (u.age && !isNaN(u.age)) ? `<span class="user-tag age-badge">${u.age} th</span>` : '';
+            const usernameHandle = u.username ? `@${escapeHtml(u.username)}` : '';
+            const activeClass = (typeof activeThreadId !== 'undefined' && activeThreadId === t.id) ? 'active-thread' : '';
+            const isContactProfile = options.isContactProfile || false;
+            const avatarClickAction = isContactProfile ? '' : `event.stopPropagation(); openNearbyUserInfo(${u.id || t.user_id})`;
+            const avatarCursor = isContactProfile ? 'cursor: default;' : 'cursor: pointer;';
+
+            return `
+                <div class="thread-card ${activeClass}" id="threadCard_${t.id}" onclick="openThreadView(${t.id})">
+                    <div class="thread-card-header">
+                        <div class="thread-card-avatar" ${avatarClickAction ? `onclick="${avatarClickAction}"` : ''} style="${avatarCursor}" title="Lihat profil ${escapeHtml(u.name || 'User')}">
+                            ${renderAvatarHtml(u.name || 'User', u.avatar_color, u.avatar_url, '', 'width: 44px; height: 44px; font-size: 1.05rem; flex-shrink: 0;')}
+                        </div>
+                        <div class="thread-card-meta">
+                            <div class="thread-card-top-row">
+                                <div class="thread-card-author-name" ${avatarClickAction ? `onclick="${avatarClickAction}"` : ''} style="${avatarCursor}" title="Lihat profil ${escapeHtml(u.name || 'User')}">
+                                    <span>${escapeHtml(u.name || 'User')}</span>
+                                    ${usernameHandle ? `<span class="thread-author-handle">${usernameHandle}</span>` : ''}
+                                    ${genderIcon}
+                                    ${ageBadge}
+                                </div>
+                                <span class="thread-distance-badge" title="Jarak saat memposting">
+                                    <i class="fa-solid fa-location-arrow"></i> ${escapeHtml(t.distance_formatted || '0 m')}
+                                </span>
+                            </div>
+                            <div class="thread-card-sub-row">
+                                <span class="thread-time-text">${t.created_at_human}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="thread-content-text">${renderThreadContentWithMentions(t.content)}</div>
+
+                    <div class="thread-footer">
+                        <div class="thread-actions-group">
+                            <button type="button" class="thread-action-pill ${isLiked ? 'liked' : ''}" id="threadCardLikeBtn_${t.id}" data-thread-like-btn="${t.id}" onclick="event.stopPropagation(); toggleLikeThread(${t.id})" title="${isLiked ? 'Batal Suka' : 'Suka'}">
+                                <i class="fa-${isLiked ? 'solid' : 'regular'} fa-heart"></i>
+                                <span id="threadCardLikeCount_${t.id}" data-thread-like-count="${t.id}" class="thread-like-count-click" onclick="${t.likes_count > 0 ? `event.stopPropagation(); openThreadLikesModal(${t.id})` : ''}" title="${t.likes_count > 0 ? 'Lihat siapa yang menyukai' : 'Suka'}">${t.likes_count}</span>
+                            </button>
+                            <button type="button" class="thread-action-pill" onclick="event.stopPropagation(); openThreadView(${t.id})" title="Lihat dan Balas">
+                                <i class="fa-regular fa-comment"></i>
+                                <span id="threadCardReplyCount_${t.id}" data-thread-reply-count="${t.id}">${t.replies_count}</span>
+                            </button>
+                        </div>
+                        ${isMy ? `
+                            <button type="button" class="thread-action-pill danger" onclick="event.stopPropagation(); confirmDeleteThread(${t.id})" title="Hapus Postingan">
+                                <i class="fa-regular fa-trash-can"></i>
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        }
         function renderAvatarHtml(name, color, avatarUrl = null, extraClass = '', extraStyle = '', badgeHtml = '') {
             const initial = (name || 'U').charAt(0).toUpperCase();
             const safeColor = color || '#2b77f8';
@@ -540,6 +598,40 @@
                 userChannel.bind('friend.notification', handleFriendNotification);
                 userChannel.bind('.friend.notification', handleFriendNotification);
 
+                function handleThreadNotification(data) {
+                    console.log('[WebSocket] thread.notification event received:', data);
+                    if (data.type === 'thread_reply') {
+                        showToast(`${data.sender?.name || 'Seseorang'} membalas utas Anda: "${data.previewText || ''}"`, 'info');
+                    } else if (data.type === 'thread_mention') {
+                        showToast(`${data.sender?.name || 'Seseorang'} menyebut Anda dalam postingan: "${data.previewText || ''}"`, 'info');
+                    } else if (data.type === 'thread_like') {
+                        const count = data.groupedCount || 1;
+                        if (count > 1) {
+                            showToast(`${data.sender?.name || 'Seseorang'} dan ${count - 1} orang lainnya menyukai postingan Anda.`, 'info');
+                        } else {
+                            showToast(`${data.sender?.name || 'Seseorang'} menyukai postingan Anda.`, 'info');
+                        }
+                    }
+
+                    // Tambah badge unread thread notif
+                    unreadThreadNotifsCount++;
+                    updateThreadNotificationBadge();
+
+                    // Perbarui notifikasi list di dropdown jika sedang dibuka atau untuk pembaruan berikutnya
+                    fetchThreadNotifications();
+
+                    // Jika user sedang membuka thread yang sama, perbarui detail thread
+                    if (activeThreadId && data.threadId && activeThreadId == data.threadId) {
+                        openThreadView(activeThreadId);
+                    } else if (currentTab === 'threads') {
+                        loadThreads();
+                    }
+                }
+
+                // Listen notifikasi thread & mention
+                userChannel.bind('thread.notification', handleThreadNotification);
+                userChannel.bind('.thread.notification', handleThreadNotification);
+
                 function handleMessagesRead(data) {
                     console.log('[WebSocket] messages.read event received:', data);
                     // Jika teman yang membaca adalah teman yang sedang aktif di chat room kita
@@ -690,14 +782,16 @@
         function updateContactInfoPanel(name, color, distFormatted, gender, age, bio = null, isFriend = true, userId = null, friendshipStatus = null, friendshipInitiator = null, friendshipId = null, avatarUrl = null, username = null) {
             const av = document.getElementById('infoPanelAvatar');
             const nm = document.getElementById('infoPanelName');
+            const headerTitle = document.getElementById('infoPanelHeaderTitle');
             const un = document.getElementById('infoPanelUsername');
-            const dst = document.getElementById('infoPanelDist');
             const bi = document.getElementById('infoPanelBio');
             const gndr = document.getElementById('infoPanelGender');
+            const gndrWrap = document.getElementById('infoPanelMetaGenderWrap');
             const ag = document.getElementById('infoPanelAge');
+            const agWrap = document.getElementById('infoPanelMetaAgeWrap');
             const loc = document.getElementById('infoPanelLocation');
-            const actions = document.querySelector('.tg-info-actions');
             const addFriendWrap = document.getElementById('infoPanelAddFriendWrap');
+            const footerActions = document.getElementById('infoPanelFooterActions');
 
             if (av) {
                 if (avatarUrl) {
@@ -712,67 +806,336 @@
                 } else {
                     av.innerText = name.charAt(0).toUpperCase();
                     av.style.backgroundImage = 'none';
-                    av.style.backgroundColor = color;
+                    av.style.backgroundColor = color || '#4f46e5';
                     av.style.cursor = 'default';
                     av.title = '';
                     av.onclick = null;
                 }
             }
             if (nm) nm.innerText = name;
+            if (headerTitle) headerTitle.innerText = name;
             if (un) {
                 un.innerText = username ? `@${username}` : '';
                 un.style.display = username ? 'block' : 'none';
             }
-            if (dst) dst.innerHTML = `<i class="fa-solid fa-location-arrow"></i> <span>${distFormatted || '0 m'}</span>`;
-            if (bi) bi.innerText = bio || 'Belum ada bio';
-            if (gndr) gndr.innerText = gender === 'male' ? 'Pria' : (gender === 'female' ? 'Wanita' : 'Tidak disebutkan');
-            if (ag) ag.innerText = age ? `${age} tahun` : 'Tidak disebutkan';
+            if (bi) {
+                bi.innerText = bio || 'Belum ada bio';
+                bi.style.color = bio ? 'var(--text-main)' : 'var(--text-muted)';
+            }
             if (loc) loc.innerText = distFormatted || '0 m';
 
-            // Jika belum berteman, sembunyikan aksi chat seperti 'Hapus Riwayat Chat'
-            if (actions) {
-                actions.style.display = isFriend ? 'flex' : 'none';
+            if (gndr && gndrWrap) {
+                if (gender) {
+                    gndr.innerText = gender === 'male' ? 'Pria' : 'Wanita';
+                    gndrWrap.style.display = 'inline-flex';
+                } else {
+                    gndrWrap.style.display = 'none';
+                }
             }
 
-            // Tombol Add Teman di Info Pengguna ketika belum berteman
+            if (ag && agWrap) {
+                if (age) {
+                    ag.innerText = `${age} tahun`;
+                    agWrap.style.display = 'inline-flex';
+                } else {
+                    agWrap.style.display = 'none';
+                }
+            }
+
+            // Tombol Add Teman / Unfriend di Profil (Threads Style Full Width Button)
             if (addFriendWrap) {
-                if (!isFriend && userId) {
-                    addFriendWrap.style.display = 'flex';
-                    if (friendshipStatus === 'pending') {
+                if (userId && (!currentUser || currentUser.id != userId)) {
+                    addFriendWrap.style.display = 'block';
+                    const safeName = escapeHtml(name).replace(/'/g, "\\'");
+                    if (isFriend) {
+                        addFriendWrap.innerHTML = `
+                            <button type="button" class="threads-btn-action unfriend" onclick="onUserCardRemoveFriend(event, ${userId}, '${safeName}')" title="Hapus dari daftar teman">
+                                <i class="fa-solid fa-user-xmark"></i> <span>Unfriend</span>
+                            </button>
+                        `;
+                    } else if (friendshipStatus === 'pending') {
                         if (friendshipInitiator == (currentUser ? currentUser.id : null)) {
-                            addFriendWrap.innerHTML = `<span style="font-size: 0.85rem; color: var(--warning); display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.5rem 1rem; border-radius: 999px; background: rgba(245, 158, 11, 0.1); font-weight: 600;"><i class="fa-solid fa-clock"></i> Permintaan Terkirim</span>`;
+                            addFriendWrap.innerHTML = `
+                                <div class="threads-btn-action pending">
+                                    <i class="fa-solid fa-clock"></i> <span>Permintaan Terkirim</span>
+                                </div>
+                            `;
                         } else {
-                            addFriendWrap.innerHTML = uiButton({ text: 'Terima Permintaan', icon: 'fa-solid fa-check', variant: 'primary', size: 'md', onclick: `respondFriend(${friendshipId}, 'accept')` });
+                            addFriendWrap.innerHTML = `
+                                <button type="button" class="threads-btn-action add-friend" onclick="respondFriend(${friendshipId}, 'accept')">
+                                    <i class="fa-solid fa-check"></i> <span>Terima Permintaan Teman</span>
+                                </button>
+                            `;
                         }
                     } else {
-                        addFriendWrap.innerHTML = uiButton({ text: 'Add Teman', icon: 'fa-solid fa-user-plus', variant: 'primary', size: 'md', onclick: `sendFriendRequest(${userId})` });
+                        addFriendWrap.innerHTML = `
+                            <button type="button" class="threads-btn-action add-friend" onclick="sendFriendRequest(${userId})">
+                                <i class="fa-solid fa-user-plus"></i> <span>Add Teman</span>
+                            </button>
+                        `;
                     }
                 } else {
                     addFriendWrap.style.display = 'none';
                     addFriendWrap.innerHTML = '';
                 }
             }
+
+            // Tampilkan tombol Hapus Chat di footer panel jika sudah berteman
+            if (footerActions) {
+                footerActions.style.display = isFriend ? 'block' : 'none';
+            }
+
+            // Muat Knot milik pengguna ini jika userId tersedia
+            if (userId) {
+                loadContactUserKnots(userId);
+            }
+        }
+
+        async function loadContactUserKnots(userId) {
+            const listEl = document.getElementById('infoPanelKnotsList');
+            const countEl = document.getElementById('infoPanelHeaderKnotCount');
+            if (!listEl) return;
+
+            listEl.innerHTML = `<div style="font-size: 0.85rem; color: var(--text-muted); padding: 2rem 1rem; text-align: center;"><i class="fa-solid fa-spinner fa-spin"></i> Memuat knot...</div>`;
+
+            try {
+                let url = `/api/blip/users/${userId}/threads`;
+                if (currentUser && currentUser.latitude && currentUser.longitude) {
+                    url += `?latitude=${currentUser.latitude}&longitude=${currentUser.longitude}`;
+                }
+                const res = await fetch(url, { headers: getHeaders() });
+                const data = await res.json();
+
+                if (data.status === 'success' && data.threads) {
+                    const threads = data.threads;
+                    if (countEl) countEl.innerText = `${threads.length} Knot`;
+
+                    if (threads.length === 0) {
+                        listEl.innerHTML = `
+                            <div class="profile-empty-knots">
+                                <i class="fa-regular fa-paper-plane"></i>
+                                <span style="font-weight: 700; font-size: 0.95rem; color: var(--text-main);">Belum ada Knot</span>
+                                <p style="font-size: 0.82rem; margin: 0; line-height: 1.4;">Pengguna ini belum pernah memposting Knot.</p>
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    listEl.innerHTML = threads.map(t => renderKnotCardHtml(t, { isContactProfile: true })).join('');
+                } else {
+                    listEl.innerHTML = `<div class="profile-empty-knots"><i class="fa-regular fa-comment-dots"></i><p>Tidak ada knot.</p></div>`;
+                }
+            } catch (err) {
+                console.error('loadContactUserKnots error:', err);
+                listEl.innerHTML = `<div style="font-size: 0.85rem; color: var(--text-muted); padding: 1.5rem; text-align: center;">Gagal memuat knot.</div>`;
+            }
         }
 
         // Buka Info Pengguna untuk orang sekitar yang belum berteman
-        function openNearbyUserInfo(userId) {
-            const user = nearbyUsersList.find(u => u.id == userId);
-            if (!user) return;
-            const fInitiator = user.friendship_initiator !== undefined && user.friendship_initiator !== null ? user.friendship_initiator : null;
-            const fId = user.friendship_id ? user.friendship_id : null;
-            const fStatus = user.friendship_status ? user.friendship_status : null;
-            updateContactInfoPanel(user.name, user.avatar_color, user.distance_formatted, user.gender, user.age, user.bio, false, user.id, fStatus, fInitiator, fId, user.avatar_url, user.username);
-            toggleContactInfoPanel(true);
+        async function openNearbyUserInfo(userId) {
+            if (!userId) return;
+
+            // Cek apakah diri sendiri
+            if (currentUser && currentUser.id == userId) {
+                toggleProfileModal();
+                return;
+            }
+
+            // 1. Cek apakah pengguna ada di daftar Teman (cachedFriendsList)
+            if (window.cachedFriendsList && window.cachedFriendsList.length > 0) {
+                const friend = window.cachedFriendsList.find(f => f.id == userId);
+                if (friend) {
+                    updateContactInfoPanel(
+                        friend.name,
+                        friend.avatar_color,
+                        friend.distance_formatted,
+                        friend.gender,
+                        friend.age,
+                        friend.bio,
+                        true,
+                        friend.id,
+                        'accepted',
+                        null,
+                        null,
+                        friend.avatar_url,
+                        friend.username
+                    );
+                    toggleContactInfoPanel(true);
+                    return;
+                }
+            }
+
+            // 2. Cek apakah ada di nearbyUsersList (Radar sekitar)
+            let user = nearbyUsersList.find(u => u.id == userId);
+            // 3. Cek di threadSearchedUsers (Hasil pencarian pengguna knot)
+            if (!user && threadSearchedUsers && threadSearchedUsers.length > 0) {
+                user = threadSearchedUsers.find(u => u.id == userId);
+            }
+
+            if (user && user.friendship_status !== undefined && user.friendship_status !== null) {
+                const fInitiator = user.friendship_initiator !== undefined && user.friendship_initiator !== null ? user.friendship_initiator : null;
+                const fId = user.friendship_id ? user.friendship_id : null;
+                const fStatus = user.friendship_status;
+                const isFriend = (fStatus === 'accepted');
+                updateContactInfoPanel(user.name, user.avatar_color, user.distance_formatted, user.gender, user.age, user.bio, isFriend, user.id, fStatus, fInitiator, fId, user.avatar_url, user.username);
+                toggleContactInfoPanel(true);
+                return;
+            }
+
+            // 4. Ambil profil akurat langsung dari backend (/api/blip/users/{id})
+            try {
+                let url = `/api/blip/users/${userId}`;
+                if (currentUser && currentUser.latitude && currentUser.longitude) {
+                    url += `?latitude=${currentUser.latitude}&longitude=${currentUser.longitude}`;
+                }
+                const res = await fetch(url, { headers: getHeaders() });
+                const data = await res.json();
+                if (data.status === 'success' && data.user) {
+                    const found = data.user;
+                    updateContactInfoPanel(
+                        found.name,
+                        found.avatar_color,
+                        found.distance_formatted,
+                        found.gender,
+                        found.age,
+                        found.bio,
+                        (found.is_friend || found.friendship_status === 'accepted'),
+                        found.id,
+                        found.friendship_status,
+                        found.friendship_initiator,
+                        found.friendship_id,
+                        found.avatar_url,
+                        found.username
+                    );
+                    toggleContactInfoPanel(true);
+                } else {
+                    showToast('Profil pengguna tidak ditemukan.', 'warning');
+                }
+            } catch (err) {
+                console.error('openNearbyUserInfo fetch error:', err);
+                showToast('Gagal memuat profil pengguna.', 'error');
+            }
         }
 
-        // Search Input Filter
+        // Search Input State & Controls
         let searchQuery = '';
-        function handleSearchFilter(query) {
-            searchQuery = (query || '').toLowerCase().trim();
+        let threadSearchedUsers = [];
+        let threadSearchUserPage = 1;
+        let threadSearchUserHasMore = false;
+        let isSearchingThreadUsers = false;
+        let isSearchingMoreUsers = false;
+
+        // Dipanggil saat teks di search input berubah (hanya untuk clear button dan live local filter tab non-knot jika diinginkan)
+        function handleSearchInputChange(val) {
+            const clearBtn = document.getElementById('btnSearchClear');
+            if (clearBtn) {
+                clearBtn.style.display = (val && val.trim().length > 0) ? 'flex' : 'none';
+            }
+
+            // Jika user menghapus seluruh teks pencarian, reset filter
+            if (!val || val.trim().length === 0) {
+                clearSearchInput();
+            }
+        }
+
+        // Dipanggil saat tombol submit / Enter ditekan
+        function handleSearchSubmit(e) {
+            if (e && e.preventDefault) e.preventDefault();
+            const input = document.getElementById('searchInput');
+            const val = (input ? input.value : '').trim();
+            performSearch(val);
+        }
+
+        function clearSearchInput() {
+            const input = document.getElementById('searchInput');
+            if (input) input.value = '';
+            const clearBtn = document.getElementById('btnSearchClear');
+            if (clearBtn) clearBtn.style.display = 'none';
+
+            searchQuery = '';
+            threadSearchedUsers = [];
+            threadSearchUserPage = 1;
+            threadSearchUserHasMore = false;
+            isSearchingThreadUsers = false;
+
             if (currentTab === 'nearby') {
                 filterAndRenderNearby();
+            } else if (currentTab === 'threads') {
+                threadsNextCursor = null;
+                loadThreads(false);
             } else {
                 filterAndRenderFriends();
+            }
+        }
+
+        function performSearch(query) {
+            searchQuery = (query || '').toLowerCase().trim();
+
+            if (currentTab === 'nearby') {
+                filterAndRenderNearby();
+            } else if (currentTab === 'threads') {
+                threadsNextCursor = null;
+                threadSearchedUsers = [];
+                threadSearchUserPage = 1;
+                threadSearchUserHasMore = false;
+
+                // Load thread postingan via lazy load API dengan filter search
+                loadThreads(false);
+
+                // Jika ada query pencarian, cari juga pengguna untuk di-add friend
+                if (searchQuery.length >= 1) {
+                    searchUsersInThreadTab(searchQuery, false);
+                } else {
+                    filterAndRenderThreads();
+                }
+            } else {
+                filterAndRenderFriends();
+            }
+        }
+
+        async function searchUsersInThreadTab(query, isAppend = false) {
+            if (isAppend) {
+                if (isSearchingMoreUsers || !threadSearchUserHasMore) return;
+                isSearchingMoreUsers = true;
+            } else {
+                if (isSearchingThreadUsers) return;
+                isSearchingThreadUsers = true;
+                threadSearchUserPage = 1;
+            }
+
+            const fetchPage = isAppend ? (threadSearchUserPage + 1) : 1;
+
+            try {
+                let url = `/api/blip/users/search?q=${encodeURIComponent(query)}&page=${fetchPage}&limit=10`;
+                if (currentUser && currentUser.latitude) url += `&latitude=${currentUser.latitude}`;
+                if (currentUser && currentUser.longitude) url += `&longitude=${currentUser.longitude}`;
+
+                const res = await fetch(url, { headers: getHeaders() });
+                const data = await res.json();
+                if (data.status === 'success' && data.users) {
+                    threadSearchUserPage = data.page || fetchPage;
+                    threadSearchUserHasMore = !!data.has_more;
+
+                    if (isAppend) {
+                        const existingIds = new Set(threadSearchedUsers.map(u => u.id));
+                        data.users.forEach(u => {
+                            if (!existingIds.has(u.id)) threadSearchedUsers.push(u);
+                        });
+                    } else {
+                        threadSearchedUsers = data.users;
+                    }
+                } else {
+                    if (!isAppend) threadSearchedUsers = [];
+                }
+            } catch (e) {
+                console.error('searchUsersInThreadTab error:', e);
+                if (!isAppend) threadSearchedUsers = [];
+            } finally {
+                isSearchingThreadUsers = false;
+                isSearchingMoreUsers = false;
+                if (currentTab === 'threads') {
+                    filterAndRenderThreads();
+                }
             }
         }
 
@@ -846,12 +1209,28 @@
             const nearbyBtn = document.getElementById('tabNearbyNavBtn');
             const contactsBtn = document.getElementById('tabContactsNavBtn');
             const friendsBtn = document.getElementById('tabFriendsNavBtn');
+            const threadsBtn = document.getElementById('tabThreadsNavBtn');
             const navAvatar = document.getElementById('navAvatar');
 
             if (nearbyBtn) nearbyBtn.classList.toggle('active', tab === 'nearby');
             if (contactsBtn) contactsBtn.classList.toggle('active', tab === 'contacts');
             if (friendsBtn) friendsBtn.classList.toggle('active', tab === 'friends');
+            if (threadsBtn) threadsBtn.classList.toggle('active', tab === 'threads');
             if (navAvatar) navAvatar.style.outline = (tab === 'profile') ? '2px solid var(--primary)' : 'none';
+
+            // Tampilkan tombol Buat Thread hanya di tab Thread
+            const btnOpenNewThread = document.getElementById('btnOpenNewThread');
+            if (btnOpenNewThread) {
+                btnOpenNewThread.style.display = (tab === 'threads') ? 'inline-flex' : 'none';
+            }
+            const btnThreadNotifsToggle = document.getElementById('btnThreadNotifsToggle');
+            if (btnThreadNotifsToggle) {
+                btnThreadNotifsToggle.style.display = (tab === 'threads') ? 'inline-flex' : 'none';
+            }
+            const btnRefreshNearby = document.getElementById('btnRefreshNearby');
+            if (btnRefreshNearby) {
+                btnRefreshNearby.style.display = 'flex';
+            }
 
             // Jika user membuka tab Teman (contacts), reset notifikasi teman yang baru di-acc
             if (tab === 'contacts') {
@@ -859,7 +1238,12 @@
                 updateNotificationBadge();
             }
 
-            // Tutup inline profile jika kembali ke nearby / contacts / friends
+            // Jika user membuka tab Knot (threads), pastikan daftar notifikasi tersinkron
+            if (tab === 'threads') {
+                fetchThreadNotifications();
+            }
+
+            // Tutup inline profile jika kembali ke nearby / contacts / friends / threads
             const chatsContent = document.getElementById('chatsSidebarContent');
             const profileView = document.getElementById('inlineProfileView');
             if (tab === 'profile') {
@@ -889,9 +1273,15 @@
                     searchInput.placeholder = 'Cari teman di Friend List...';
                 } else if (tab === 'friends') {
                     searchInput.placeholder = 'Cari riwayat percakapan...';
+                } else if (tab === 'threads') {
+                    searchInput.placeholder = 'Cari postingan atau user untuk di-add...';
                 } else {
                     searchInput.placeholder = 'Cari orang sekitar...';
                 }
+            }
+
+            if (tab !== 'threads') {
+                closeThreadView();
             }
 
             if (tab === 'nearby') {
@@ -899,15 +1289,17 @@
                 loadNearbyUsers(false);
             } else if (tab === 'contacts' || tab === 'friends') {
                 loadFriends();
+            } else if (tab === 'threads') {
+                loadThreads();
             }
         }
 
-        // Manual Refresh Orang Sekitar
+        // Manual Refresh Orang Sekitar & Feed
         async function refreshNearbyManual() {
             const icon = document.getElementById('refreshIcon');
             if (icon) icon.classList.add('fa-spin');
             
-            showToast('Memindai ulang radar sekitar...', 'info');
+            showToast('Memperbarui data sekitar...', 'info');
 
             // Coba perbarui koordinat GPS jika ada
             if (navigator.geolocation) {
@@ -924,12 +1316,14 @@
             async function finishRefresh() {
                 if (currentTab === 'nearby') {
                     await loadNearbyUsers();
+                } else if (currentTab === 'threads') {
+                    await loadThreads();
                 } else {
                     await loadFriends();
                 }
                 setTimeout(() => {
                     if (icon) icon.classList.remove('fa-spin');
-                    showToast('Radar sekitar berhasil diperbarui!', 'success');
+                    showToast('Data berhasil diperbarui!', 'success');
                 }, 300);
             }
         }
@@ -1419,7 +1813,7 @@
         // Add Teman
         async function sendFriendRequest(targetUserId) {
             try {
-                // Optimistic UI update: langsung ubah status target di list menjadi 'pending'
+                // Optimistic UI update: langsung ubah status target di nearby & searched users list menjadi 'pending'
                 const targetInList = nearbyUsersList.find(u => u.id == targetUserId);
                 if (targetInList) {
                     targetInList.friendship_status = 'pending';
@@ -1427,10 +1821,25 @@
                     filterAndRenderNearby();
                 }
 
+                const targetInSearch = threadSearchedUsers.find(u => u.id == targetUserId);
+                if (targetInSearch) {
+                    targetInSearch.friendship_status = 'pending';
+                    targetInSearch.friendship_initiator = currentUser ? currentUser.id : null;
+                    if (currentTab === 'threads') {
+                        filterAndRenderThreads();
+                    }
+                }
+
                 // Perbarui juga tombol di panel Info Pengguna jika sedang terbuka untuk user ini
                 const addFriendWrap = document.getElementById('infoPanelAddFriendWrap');
                 if (addFriendWrap && addFriendWrap.style.display !== 'none') {
                     addFriendWrap.innerHTML = `<span style="font-size: 0.85rem; color: var(--warning); display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.5rem 1rem; border-radius: 999px; background: rgba(245, 158, 11, 0.1); font-weight: 600;"><i class="fa-solid fa-clock"></i> Permintaan Terkirim</span>`;
+                }
+
+                // Perbarui juga tombol di modal daftar penyuka (Likes Modal) jika tombol ada
+                const likeActionBtn = document.getElementById(`likeUserActionBtn_${targetUserId}`);
+                if (likeActionBtn) {
+                    likeActionBtn.outerHTML = `<span class="knot-search-user-btn pending"><i class="fa-solid fa-clock"></i> Terkirim</span>`;
                 }
 
                 const res = await fetch('/api/blip/friend-request', {
@@ -1441,6 +1850,10 @@
                 const data = await res.json();
                 if (data.status === 'success' || data.status === 'accepted') {
                     showToast(data.message, 'success');
+                    if (targetInSearch) {
+                        targetInSearch.friendship_status = (data.status === 'accepted') ? 'accepted' : 'pending';
+                        if (currentTab === 'threads') filterAndRenderThreads();
+                    }
                     nearbyPage = 1;
                     loadNearbyUsers(false);
                 } else {
@@ -1518,6 +1931,11 @@
                     return;
                 }
 
+                // Tutup interface thread knot jika sedang aktif
+                if (activeThreadId) {
+                    closeThreadView();
+                }
+
                 activeChatFriendId = friendId;
                 document.body.classList.add('in-chat-mobile');
                 try {
@@ -1528,6 +1946,9 @@
 
                 document.getElementById('chatEmptyState').style.display = 'none';
                 const iface = document.getElementById('activeChatInterface');
+                iface.style.display = 'flex';
+                const threadIface = document.getElementById('activeThreadInterface');
+                if (threadIface) threadIface.style.display = 'none';
                 iface.style.display = 'flex';
 
                 document.getElementById('chatHeaderName').innerText = name;
@@ -1859,6 +2280,7 @@
             const headerDropdown = document.getElementById('chatHeaderDropdown');
             if (headerDropdown) headerDropdown.style.display = 'none';
             closeAllUserCardMenus();
+            closeAvatarDropdown();
         });
 
         // Handler Menu: Select Pesan
@@ -2400,8 +2822,42 @@
             }
         }
 
-        // Profile View (Inline di Sidebar, Menggantikan Popup)
-        function openProfileModal() {
+        // Profile View (Twitter / X Style Inline di Sidebar)
+        let activeProfileSubTab = 'knots';
+        let userProfileKnots = [];
+
+        function switchProfileSubTab(tab) {
+            activeProfileSubTab = tab;
+            const knotsTabBtn = document.getElementById('profileTabKnotsBtn');
+            const editTabBtn = document.getElementById('profileTabEditBtn');
+            const knotsContent = document.getElementById('profileKnotsTabContent');
+            const editContent = document.getElementById('profileEditTabContent');
+            const editActionBtn = document.getElementById('btnToggleEditProfile');
+
+            if (tab === 'knots') {
+                if (knotsTabBtn) knotsTabBtn.classList.add('active');
+                if (editTabBtn) editTabBtn.classList.remove('active');
+                if (knotsContent) knotsContent.style.display = 'flex';
+                if (editContent) editContent.style.display = 'none';
+                if (editActionBtn) editActionBtn.innerHTML = '<i class="fa-solid fa-pen"></i> <span>Edit Profil</span>';
+            } else {
+                if (knotsTabBtn) knotsTabBtn.classList.remove('active');
+                if (editTabBtn) editTabBtn.classList.add('active');
+                if (knotsContent) knotsContent.style.display = 'none';
+                if (editContent) editContent.style.display = 'flex';
+                if (editActionBtn) editActionBtn.innerHTML = '<i class="fa-solid fa-arrow-left"></i> <span>Lihat Profil</span>';
+            }
+        }
+
+        function toggleEditProfileSection() {
+            if (activeProfileSubTab === 'knots') {
+                switchProfileSubTab('edit');
+            } else {
+                switchProfileSubTab('knots');
+            }
+        }
+
+        async function openProfileModal() {
             if (!currentUser) return;
             const inputName = document.getElementById('inputProfileName');
             if (inputName) inputName.value = currentUser.name || '';
@@ -2430,14 +2886,65 @@
             updateGenderUI();
             updateProfileAvatarPreview();
 
-            const pal = document.getElementById('colorPalette');
-            if (pal) {
-                pal.innerHTML = colors.map(c => `
-                    <div class="color-circle ${c === selectedColor ? 'selected' : ''}" style="background-color: ${c};" onclick="selectAvatarColor('${c}', this)"></div>
-                `).join('');
+            // Default ke tab knots
+            switchProfileSubTab('knots');
+            switchTab('profile');
+
+            // Ambil knots milik user sendiri
+            loadMyProfileKnots();
+        }
+
+        async function loadMyProfileKnots() {
+            if (!currentUser) return;
+            const container = document.getElementById('profileKnotsList');
+            const knotCountBadge = document.getElementById('profileHeaderKnotCount');
+            if (!container) return;
+
+            container.innerHTML = `
+                <div style="padding: 2rem 1rem; text-align: center; color: var(--text-muted); font-size: 0.85rem;">
+                    <i class="fa-solid fa-spinner fa-spin" style="margin-right: 6px;"></i> Memuat knot Anda...
+                </div>
+            `;
+
+            try {
+                let url = `/api/blip/users/${currentUser.id}/threads`;
+                if (currentUser.latitude && currentUser.longitude) {
+                    url += `?latitude=${currentUser.latitude}&longitude=${currentUser.longitude}`;
+                }
+                const res = await fetch(url, { headers: getHeaders() });
+                const data = await res.json();
+
+                if (data.status === 'success' && data.threads) {
+                    userProfileKnots = data.threads;
+                    if (knotCountBadge) {
+                        knotCountBadge.innerText = `${userProfileKnots.length} Knot`;
+                    }
+                    renderUserProfileKnots(userProfileKnots, container);
+                } else {
+                    container.innerHTML = `<div class="profile-empty-knots"><i class="fa-regular fa-comment-dots"></i><p>Belum ada Knot yang diposting.</p></div>`;
+                }
+            } catch (err) {
+                console.error('loadMyProfileKnots error:', err);
+                container.innerHTML = `<div style="padding: 1.5rem; text-align: center; color: var(--text-muted); font-size: 0.85rem;">Gagal memuat Knot.</div>`;
+            }
+        }
+
+        function renderUserProfileKnots(threads, container) {
+            if (!threads || threads.length === 0) {
+                container.innerHTML = `
+                    <div class="profile-empty-knots">
+                        <i class="fa-regular fa-paper-plane"></i>
+                        <span style="font-weight: 700; font-size: 0.95rem; color: var(--text-main);">Belum ada Knot</span>
+                        <p style="font-size: 0.82rem; margin: 0; line-height: 1.4;">Ketika Anda memposting Knot, postingan tersebut akan muncul di sini.</p>
+                        <button type="button" class="twitter-btn-edit-profile" style="background: var(--primary); color: #ffffff; border-color: var(--primary); margin-top: 0.5rem;" onclick="openCreateThreadModal()">
+                            <i class="fa-solid fa-plus"></i> Buat Knot Baru
+                        </button>
+                    </div>
+                `;
+                return;
             }
 
-            switchTab('profile');
+            container.innerHTML = threads.map(t => renderKnotCardHtml(t)).join('');
         }
 
         function updateProfileBioCounter(val) {
@@ -2453,11 +2960,110 @@
             switchTab(targetTab);
         }
 
+        let profileUsernameAvailable = true;
+        let profileUsernameDebounce = null;
+
+        function onProfileNameChange(val) {
+            updateProfilePreviewName(val);
+            const errEl = document.getElementById('profileNameErrorStatus');
+            const clean = (val || '').trim();
+            if (!clean) {
+                if (errEl) {
+                    errEl.style.display = 'block';
+                    errEl.innerHTML = '<span style="color: #ef4444;"><i class="fa-solid fa-circle-exclamation"></i> Nama tidak boleh kosong.</span>';
+                }
+            } else if (clean.length > 50) {
+                if (errEl) {
+                    errEl.style.display = 'block';
+                    errEl.innerHTML = '<span style="color: #ef4444;"><i class="fa-solid fa-circle-exclamation"></i> Nama maksimal 50 karakter.</span>';
+                }
+            } else {
+                if (errEl) {
+                    errEl.style.display = 'none';
+                    errEl.innerHTML = '';
+                }
+            }
+        }
+
+        function onProfileUsernameChange(val) {
+            updateProfilePreviewUsername(val);
+            clearTimeout(profileUsernameDebounce);
+            const statusEl = document.getElementById('profileUsernameStatus');
+            const clean = (val || '').trim().replace(/^@/, '').toLowerCase();
+
+            // Jika username sama persis dengan username akun sendiri saat ini
+            if (currentUser && currentUser.username && currentUser.username.toLowerCase() === clean) {
+                profileUsernameAvailable = true;
+                if (statusEl) statusEl.innerHTML = '';
+                return;
+            }
+
+            if (!clean) {
+                profileUsernameAvailable = false;
+                if (statusEl) {
+                    statusEl.innerHTML = '<span style="color: #ef4444;"><i class="fa-solid fa-circle-exclamation"></i> Username tidak boleh kosong.</span>';
+                }
+                return;
+            }
+
+            if (clean.length < 3) {
+                profileUsernameAvailable = false;
+                if (statusEl) {
+                    statusEl.innerHTML = '<span style="color: #ef4444;"><i class="fa-solid fa-circle-exclamation"></i> Minimal 3 karakter.</span>';
+                }
+                return;
+            }
+
+            if (clean.length > 25) {
+                profileUsernameAvailable = false;
+                if (statusEl) {
+                    statusEl.innerHTML = '<span style="color: #ef4444;"><i class="fa-solid fa-circle-exclamation"></i> Maksimal 25 karakter.</span>';
+                }
+                return;
+            }
+
+            if (!/^[a-zA-Z0-9_]+$/.test(clean)) {
+                profileUsernameAvailable = false;
+                if (statusEl) {
+                    statusEl.innerHTML = '<span style="color: #ef4444;"><i class="fa-solid fa-circle-exclamation"></i> Hanya boleh huruf, angka, dan underscore (_).</span>';
+                }
+                return;
+            }
+
+            if (statusEl) {
+                statusEl.innerHTML = '<span style="color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Memeriksa ketersediaan...</span>';
+            }
+
+            profileUsernameDebounce = setTimeout(async () => {
+                try {
+                    const res = await fetch(`/api/blip/check-username?username=${encodeURIComponent(clean)}`, {
+                        headers: getHeaders()
+                    });
+                    const data = await res.json();
+                    if (data.available) {
+                        profileUsernameAvailable = true;
+                        if (statusEl) {
+                            statusEl.innerHTML = `<span style="color: #10b981; font-weight: 600;"><i class="fa-solid fa-circle-check"></i> @${clean} tersedia!</span>`;
+                        }
+                    } else {
+                        profileUsernameAvailable = false;
+                        if (statusEl) {
+                            statusEl.innerHTML = `<span style="color: #ef4444; font-weight: 600;"><i class="fa-solid fa-circle-xmark"></i> ${escapeHtml(data.message || 'Username sudah dipakai.')}</span>`;
+                        }
+                    }
+                } catch (e) {
+                    if (statusEl) statusEl.innerHTML = '';
+                }
+            }, 300);
+        }
+
         function updateProfilePreviewName(val) {
             const previewName = document.getElementById('profileNamePreview');
+            const headerTitleName = document.getElementById('profileHeaderTitleName');
             const previewAv = document.getElementById('profileAvatarPreview');
             const name = (val || '').trim() || 'Akun Saya';
             if (previewName) previewName.innerText = name;
+            if (headerTitleName) headerTitleName.innerText = name;
             // Hanya update inisial huruf jika user tidak menggunakan foto profil
             if (previewAv && (!currentUser || !currentUser.avatar_url)) {
                 previewAv.innerText = name.charAt(0).toUpperCase();
@@ -2472,34 +3078,88 @@
             }
         }
 
+        function toggleAvatarDropdown(e) {
+            if (e) e.stopPropagation();
+            const dropdown = document.getElementById('avatarOptionsMenuDropdown');
+            const deleteBtn = document.getElementById('avatarDropdownDeleteBtn');
+            if (!dropdown) return;
+
+            if (dropdown.style.display === 'flex') {
+                dropdown.style.display = 'none';
+            } else {
+                // Tampilkan opsi hapus hanya jika pengguna punya foto profil
+                const hasPhoto = !!(currentUser && currentUser.avatar_url);
+                if (deleteBtn) {
+                    deleteBtn.style.display = hasPhoto ? 'flex' : 'none';
+                }
+                dropdown.style.display = 'flex';
+            }
+        }
+
+        function closeAvatarDropdown() {
+            const dropdown = document.getElementById('avatarOptionsMenuDropdown');
+            if (dropdown) dropdown.style.display = 'none';
+        }
+
+        function onAvatarDropdownUploadClick() {
+            closeAvatarDropdown();
+            const fileInput = document.getElementById('inputAvatarFile');
+            if (fileInput) fileInput.click();
+        }
+
+        function onAvatarDropdownDeleteClick() {
+            closeAvatarDropdown();
+            confirmRemoveAvatar();
+        }
+
         let cropperInstance = null;
 
         function updateProfileAvatarPreview() {
             const previewAv = document.getElementById('profileAvatarPreview');
+            const editPreviewAv = document.getElementById('profileEditAvatarPreview');
             const previewName = document.getElementById('profileNamePreview');
+            const headerTitleName = document.getElementById('profileHeaderTitleName');
+            const bioDisplay = document.getElementById('profileBioDisplay');
             const deleteBadge = document.getElementById('btnDeleteAvatarBadge');
+            const metaGender = document.getElementById('profileMetaGender');
+            const metaGenderWrap = document.getElementById('profileMetaGenderWrap');
+            const metaAge = document.getElementById('profileMetaAge');
+            const metaAgeWrap = document.getElementById('profileMetaAgeWrap');
+            const metaJoined = document.getElementById('profileMetaJoined');
+
             if (currentUser) {
-                if (previewAv) {
+                const applyAvatarStyle = (el) => {
+                    if (!el) return;
                     if (currentUser.avatar_url) {
-                        previewAv.innerText = '';
-                        previewAv.style.backgroundImage = `url('${escapeHtml(currentUser.avatar_url)}')`;
-                        previewAv.style.backgroundSize = 'cover';
-                        previewAv.style.backgroundPosition = 'center';
-                        previewAv.style.backgroundColor = 'transparent';
-                        previewAv.style.cursor = 'pointer';
-                        previewAv.title = 'Klik untuk melihat foto lebih besar';
-                        previewAv.onclick = () => openImageLightbox(currentUser.avatar_url);
+                        el.innerText = '';
+                        el.style.backgroundImage = `url('${escapeHtml(currentUser.avatar_url)}')`;
+                        el.style.backgroundSize = 'cover';
+                        el.style.backgroundPosition = 'center';
+                        el.style.backgroundColor = 'transparent';
+                        el.style.cursor = 'pointer';
+                        el.title = 'Klik untuk melihat foto lebih besar';
+                        el.onclick = () => openImageLightbox(currentUser.avatar_url);
                     } else {
-                        previewAv.innerText = (currentUser.name || 'B').charAt(0).toUpperCase();
-                        previewAv.style.backgroundImage = 'none';
-                        previewAv.style.backgroundColor = selectedColor || currentUser.avatar_color;
-                        previewAv.style.cursor = 'default';
-                        previewAv.title = '';
-                        previewAv.onclick = null;
+                        el.innerText = (currentUser.name || 'B').charAt(0).toUpperCase();
+                        el.style.backgroundImage = 'none';
+                        el.style.backgroundColor = selectedColor || currentUser.avatar_color;
+                        el.style.cursor = 'default';
+                        el.title = '';
+                        el.onclick = null;
                     }
-                }
+                };
+
+                applyAvatarStyle(previewAv);
+                applyAvatarStyle(editPreviewAv);
                 if (previewName) {
                     previewName.innerText = currentUser.name || 'Akun Saya';
+                }
+                if (headerTitleName) {
+                    headerTitleName.innerText = currentUser.name || 'Profil';
+                }
+                if (bioDisplay) {
+                    bioDisplay.innerText = currentUser.bio || 'Belum ada bio';
+                    bioDisplay.style.color = currentUser.bio ? 'var(--text-main)' : 'var(--text-muted)';
                 }
                 const previewUsername = document.getElementById('profileUsernamePreview');
                 if (previewUsername) {
@@ -2507,6 +3167,41 @@
                 }
                 if (deleteBadge) {
                     deleteBadge.style.display = currentUser.avatar_url ? 'inline-flex' : 'none';
+                }
+
+                // Gender meta
+                if (metaGender && metaGenderWrap) {
+                    if (currentUser.gender) {
+                        metaGender.innerText = currentUser.gender === 'male' ? 'Pria' : 'Wanita';
+                        metaGenderWrap.style.display = 'inline-flex';
+                    } else {
+                        metaGenderWrap.style.display = 'none';
+                    }
+                }
+
+                // Age meta
+                if (metaAge && metaAgeWrap) {
+                    if (currentUser.age || currentUser.calculated_age) {
+                        metaAge.innerText = `${currentUser.age || currentUser.calculated_age} tahun`;
+                        metaAgeWrap.style.display = 'inline-flex';
+                    } else {
+                        metaAgeWrap.style.display = 'none';
+                    }
+                }
+
+                // Joined meta
+                if (metaJoined) {
+                    if (currentUser.created_at) {
+                        try {
+                            const d = new Date(currentUser.created_at);
+                            const monthYear = d.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+                            metaJoined.innerText = `Bergabung ${monthYear}`;
+                        } catch (e) {
+                            metaJoined.innerText = 'Bergabung baru-baru ini';
+                        }
+                    } else {
+                        metaJoined.innerText = 'Bergabung baru-baru ini';
+                    }
                 }
             }
         }
@@ -2789,17 +3484,41 @@
 
         async function handleUpdateProfile(e) {
             e.preventDefault();
-            const name = document.getElementById('inputProfileName').value.trim();
+            const nameInput = document.getElementById('inputProfileName');
+            const name = (nameInput ? nameInput.value : '').trim();
             const usernameInput = document.getElementById('inputProfileUsername');
             let username = usernameInput ? usernameInput.value.trim().replace(/^@/, '').toLowerCase() : '';
             let bio = (document.getElementById('inputProfileBio')?.value || '').trim();
-            // Auto phrase: ubah line break/enter menjadi satu spasi
             bio = bio.replace(/[\r\n]+/g, ' ').trim();
-            const birthdateVal = document.getElementById('inputProfileBirthdate').value;
+            const birthdateVal = document.getElementById('inputProfileBirthdate')?.value || '';
 
-            if (!name) return;
+            if (!name) {
+                showToast('Nama Anda wajib diisi.', 'error');
+                if (nameInput) nameInput.focus();
+                return;
+            }
+
             if (!username) {
                 showToast('Username wajib diisi.', 'error');
+                if (usernameInput) usernameInput.focus();
+                return;
+            }
+
+            if (username.length < 3 || username.length > 25) {
+                showToast('Panjang username harus antara 3 - 25 karakter.', 'error');
+                if (usernameInput) usernameInput.focus();
+                return;
+            }
+
+            if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+                showToast('Username hanya boleh berupa huruf, angka, dan underscore (_).', 'error');
+                if (usernameInput) usernameInput.focus();
+                return;
+            }
+
+            if (!profileUsernameAvailable) {
+                showToast(`Username @${username} sudah digunakan atau tidak valid.`, 'error');
+                if (usernameInput) usernameInput.focus();
                 return;
             }
 
@@ -2821,12 +3540,18 @@
                     currentUser = data.user;
                     updateUserUI();
                     showToast('Profil berhasil disimpan!', 'success');
-                    closeProfileModal();
+                    switchProfileSubTab('knots');
                 } else {
-                    showToast(data.message || 'Gagal update profil.', 'error');
+                    // Tampilkan pesan error validasi spesifik dari backend (misal: unique username)
+                    const errMsg = data.message || (data.errors ? Object.values(data.errors).flat().join(' ') : 'Gagal update profil.');
+                    showToast(errMsg, 'error');
+                    const statusEl = document.getElementById('profileUsernameStatus');
+                    if (statusEl && errMsg.toLowerCase().includes('username')) {
+                        statusEl.innerHTML = `<span style="color: #ef4444; font-weight: 600;"><i class="fa-solid fa-circle-xmark"></i> ${escapeHtml(errMsg)}</span>`;
+                    }
                 }
             } catch (err) {
-                showToast('Gagal update profil.', 'error');
+                showToast('Gagal menyimpan profil, periksa koneksi Anda.', 'error');
             }
         }
 
@@ -2844,11 +3569,20 @@
             if (!listEl) return;
 
             listEl.addEventListener('scroll', () => {
-                if (currentTab !== 'nearby') return;
-                // Jika sudah mendekati dasar list (sisa 60px)
-                if (listEl.scrollTop + listEl.clientHeight >= listEl.scrollHeight - 60) {
-                    if (nearbyHasMore && !nearbyLoading) {
-                        loadNearbyUsers(true);
+                // Lazy Load untuk Radar Sekitar
+                if (currentTab === 'nearby') {
+                    if (listEl.scrollTop + listEl.clientHeight >= listEl.scrollHeight - 60) {
+                        if (nearbyHasMore && !nearbyLoading) {
+                            loadNearbyUsers(true);
+                        }
+                    }
+                }
+                // Lazy Load untuk Postingan Knot
+                else if (currentTab === 'threads') {
+                    if (listEl.scrollTop + listEl.clientHeight >= listEl.scrollHeight - 60) {
+                        if (threadsHasMore && !threadsLoading) {
+                            loadThreads(true);
+                        }
                     }
                 }
             });
@@ -2860,12 +3594,1346 @@
             return div.innerHTML;
         }
 
+        // Render teks thread / balasan dengan konversi @username menjadi mention tag yang bisa diklik
+        function renderThreadContentWithMentions(content) {
+            if (!content) return '';
+            const safe = escapeHtml(content);
+            // Regex mencari @username (karakter alfanumerik + garis bawah)
+            return safe.replace(/@([a-zA-Z0-9_]{3,30})/g, (match, username) => {
+                return `<span class="thread-mention-tag" onclick="event.stopPropagation(); openMentionUserProfile('${escapeHtml(username)}')" title="Lihat profil @${escapeHtml(username)}">@${escapeHtml(username)}</span>`;
+            });
+        }
+
+        // Buka panel profil pengguna saat mention @username diklik
+        async function openMentionUserProfile(username) {
+            const clean = username.replace(/^@/, '').trim().toLowerCase();
+            if (!clean) return;
+
+            try {
+                let url = `/api/blip/users/by-username/${clean}`;
+                const params = new URLSearchParams();
+                if (currentUser && currentUser.latitude) params.append('latitude', currentUser.latitude);
+                if (currentUser && currentUser.longitude) params.append('longitude', currentUser.longitude);
+                if (params.toString()) url += `?${params.toString()}`;
+
+                const res = await fetch(url, { headers: getHeaders() });
+                const data = await res.json();
+
+                if (data.status === 'success' && data.user) {
+                    const u = data.user;
+                    updateContactInfoPanel(
+                        u.name,
+                        u.avatar_color,
+                        u.distance_formatted,
+                        u.gender,
+                        u.age,
+                        u.bio,
+                        u.is_friend,
+                        u.id,
+                        u.friendship_status,
+                        u.friendship_initiator,
+                        u.friendship_id,
+                        u.avatar_url,
+                        u.username
+                    );
+                    toggleContactInfoPanel(true);
+                } else {
+                    showToast(data.message || 'Pengguna tidak ditemukan.', 'warning');
+                }
+            } catch (err) {
+                console.error('openMentionUserProfile error:', err);
+                showToast('Gagal memuat profil pengguna.', 'error');
+            }
+        }
+
+        // Inisialisasi Autocomplete Mention (@username) pada Input/Textarea
+        function setupMentionAutocomplete(inputId, dropdownId) {
+            const input = document.getElementById(inputId);
+            const dropdown = document.getElementById(dropdownId);
+            if (!input || !dropdown) return;
+
+            let debounceTimer = null;
+            let currentMentionQuery = null;
+            let mentionStartIndex = -1;
+            let selectedIndex = -1;
+            let suggestionItems = [];
+
+            // Hide dropdown when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+                    dropdown.style.display = 'none';
+                }
+            });
+
+            input.addEventListener('input', () => {
+                const text = input.value;
+                const cursorPos = input.selectionStart;
+                
+                // Cari apakah kursor tepat berada setelah simbol @
+                const leftText = text.slice(0, cursorPos);
+                const match = leftText.match(/(?:^|\s)@([a-zA-Z0-9_]*)$/);
+
+                if (match) {
+                    currentMentionQuery = match[1];
+                    mentionStartIndex = leftText.lastIndexOf('@');
+                    clearTimeout(debounceTimer);
+                    debounceTimer = setTimeout(() => {
+                        fetchMentionSuggestions(currentMentionQuery);
+                    }, 180);
+                } else {
+                    dropdown.style.display = 'none';
+                    currentMentionQuery = null;
+                }
+            });
+
+            // Keyboard navigation (ArrowUp, ArrowDown, Enter, Tab, Escape)
+            input.addEventListener('keydown', (e) => {
+                if (dropdown.style.display === 'none' || suggestionItems.length === 0) return;
+
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    selectedIndex = (selectedIndex + 1) % suggestionItems.length;
+                    highlightSelectedMention();
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    selectedIndex = (selectedIndex - 1 + suggestionItems.length) % suggestionItems.length;
+                    highlightSelectedMention();
+                } else if (e.key === 'Enter' || e.key === 'Tab') {
+                    if (selectedIndex >= 0 && selectedIndex < suggestionItems.length) {
+                        e.preventDefault();
+                        applyMention(suggestionItems[selectedIndex].username);
+                    }
+                } else if (e.key === 'Escape') {
+                    dropdown.style.display = 'none';
+                }
+            });
+
+            function highlightSelectedMention() {
+                const items = dropdown.querySelectorAll('.mention-item');
+                items.forEach((el, idx) => {
+                    el.classList.toggle('selected', idx === selectedIndex);
+                    if (idx === selectedIndex) {
+                        el.scrollIntoView({ block: 'nearest' });
+                    }
+                });
+            }
+
+            async function fetchMentionSuggestions(q) {
+                try {
+                    let url = `/api/blip/users/mention-suggestions?q=${encodeURIComponent(q || '')}`;
+                    const res = await fetch(url, { headers: getHeaders() });
+                    const data = await res.json();
+
+                    if (data.status === 'success' && data.users && data.users.length > 0) {
+                        suggestionItems = data.users;
+                        selectedIndex = 0;
+                        renderDropdown(suggestionItems);
+                    } else {
+                        dropdown.style.display = 'none';
+                        suggestionItems = [];
+                    }
+                } catch (e) {
+                    dropdown.style.display = 'none';
+                }
+            }
+
+            function renderDropdown(users) {
+                dropdown.innerHTML = users.map((u, idx) => {
+                    return `
+                        <div class="mention-item ${idx === 0 ? 'selected' : ''}" data-username="${escapeHtml(u.username)}">
+                            ${renderAvatarHtml(u.name || 'User', u.avatar_color, u.avatar_url, '', 'width: 32px; height: 32px; font-size: 0.85rem; flex-shrink: 0;')}
+                            <div class="mention-item-info">
+                                <span class="mention-item-name">${escapeHtml(u.name || 'User')}</span>
+                                <span class="mention-item-handle">@${escapeHtml(u.username)}</span>
+                            </div>
+                            <span class="mention-item-dist">
+                                <i class="fa-solid fa-location-arrow"></i> ${escapeHtml(u.distance_formatted)}
+                            </span>
+                        </div>
+                    `;
+                }).join('');
+
+                dropdown.style.display = 'block';
+
+                dropdown.querySelectorAll('.mention-item').forEach((item) => {
+                    item.addEventListener('click', () => {
+                        applyMention(item.getAttribute('data-username'));
+                    });
+                });
+            }
+
+            function applyMention(username) {
+                if (mentionStartIndex < 0 || !username) return;
+
+                const text = input.value;
+                const cursorPos = input.selectionStart;
+                const before = text.slice(0, mentionStartIndex);
+                const after = text.slice(cursorPos);
+
+                const replacement = `@${username} `;
+                input.value = before + replacement + after;
+
+                const newCursorPos = before.length + replacement.length;
+                input.setSelectionRange(newCursorPos, newCursorPos);
+                input.focus();
+
+                dropdown.style.display = 'none';
+                suggestionItems = [];
+                selectedIndex = -1;
+
+                if (inputId === 'createThreadInputContent') {
+                    updateThreadCharCounter(input.value);
+                }
+            }
+        }
+
+        // ==========================================
+        // THREADS SYSTEM (Public Posts & Discussions)
+        // ==========================================
+        let threadsList = [];
+        let activeThreadId = null;
+        let unreadThreadNotifsCount = 0;
+        let cachedThreadNotifs = [];
+
+        // Update badge notifikasi thread (di tab navigation & di header icon)
+        function updateThreadNotificationBadge() {
+            const navBadge = document.getElementById('unreadThreadsBadge');
+            const headerBadge = document.getElementById('headerThreadNotifBadge');
+
+            if (navBadge) {
+                if (unreadThreadNotifsCount > 0) {
+                    navBadge.innerText = unreadThreadNotifsCount > 99 ? '99+' : unreadThreadNotifsCount;
+                    navBadge.style.display = 'inline-flex';
+                } else {
+                    navBadge.style.display = 'none';
+                }
+            }
+
+            if (headerBadge) {
+                if (unreadThreadNotifsCount > 0) {
+                    headerBadge.innerText = unreadThreadNotifsCount > 99 ? '99+' : unreadThreadNotifsCount;
+                    headerBadge.style.display = 'inline-flex';
+                } else {
+                    headerBadge.style.display = 'none';
+                }
+            }
+        }
+
+        // Ambil notifikasi thread dari backend
+        async function fetchThreadNotifications() {
+            try {
+                const res = await fetch('/api/blip/threads/notifications', { headers: getHeaders() });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    unreadThreadNotifsCount = data.unread_count || 0;
+                    cachedThreadNotifs = data.notifications || [];
+                    updateThreadNotificationBadge();
+                    renderThreadNotificationsList();
+                }
+            } catch (err) {
+                console.error('fetchThreadNotifications error:', err);
+            }
+        }
+
+        // Buka / Tutup dropdown notifikasi thread di header
+        function toggleThreadNotificationsDropdown(e) {
+            if (e) {
+                if (typeof e.stopPropagation === 'function') e.stopPropagation();
+                if (typeof e.preventDefault === 'function') e.preventDefault();
+            }
+            const dropdown = document.getElementById('threadNotifsDropdownMenu');
+            if (!dropdown) return;
+
+            const isCurrentlyOpen = dropdown.style.display === 'flex' || dropdown.style.display === 'block';
+            if (isCurrentlyOpen) {
+                dropdown.style.display = 'none';
+            } else {
+                dropdown.style.display = 'flex';
+                fetchThreadNotifications();
+            }
+        }
+        window.toggleThreadNotificationsDropdown = toggleThreadNotificationsDropdown;
+        window.markAllThreadNotifsAsRead = markAllThreadNotifsAsRead;
+        window.onThreadNotificationClick = onThreadNotificationClick;
+
+        // Tutup dropdown notifikasi jika klik di luar
+        document.addEventListener('click', (e) => {
+            const dropdown = document.getElementById('threadNotifsDropdownMenu');
+            const toggleBtn = document.getElementById('btnThreadNotifsToggle');
+            if (dropdown && dropdown.style.display !== 'none') {
+                if (!dropdown.contains(e.target) && (!toggleBtn || !toggleBtn.contains(e.target))) {
+                    dropdown.style.display = 'none';
+                }
+            }
+        });
+
+        // Render daftar notifikasi ke dropdown
+        function renderThreadNotificationsList() {
+            const container = document.getElementById('threadNotifsListContainer');
+            if (!container) return;
+
+            if (cachedThreadNotifs.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 2rem 1rem; color: var(--text-muted);">
+                        <i class="fa-regular fa-bell-slash" style="font-size: 1.5rem; opacity: 0.4; margin-bottom: 0.4rem;"></i>
+                        <p style="font-size: 0.82rem; margin: 0;">Belum ada notifikasi balasan atau tag.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = cachedThreadNotifs.map(n => {
+                const s = n.sender || {};
+                const isReply = n.type === 'thread_reply';
+                const isLike = n.type === 'thread_like';
+                const likeCount = n.like_count || 1;
+
+                let actionText = '';
+                let iconClass = '';
+                let iconColor = '';
+
+                if (isLike) {
+                    if (likeCount > 1) {
+                        actionText = `dan ${likeCount - 1} orang lainnya menyukai knot Anda`;
+                    } else {
+                        actionText = 'menyukai knot Anda';
+                    }
+                    iconClass = 'fa-heart';
+                    iconColor = '#ef4444';
+                } else if (isReply) {
+                    actionText = 'membalas knot Anda';
+                    iconClass = 'fa-reply';
+                    iconColor = 'var(--primary)';
+                } else {
+                    actionText = 'menyebut Anda dalam knot';
+                    iconClass = 'fa-at';
+                    iconColor = '#8b5cf6';
+                }
+
+                const notifIdsJson = JSON.stringify(n.ids || [n.id]);
+
+                return `
+                    <div class="thread-notif-item ${!n.is_read ? 'unread' : ''}" onclick='onThreadNotificationClick(${notifIdsJson}, ${n.thread_id})'>
+                        ${renderAvatarHtml(s.name || 'User', s.avatar_color, s.avatar_url, '', 'width: 34px; height: 34px; font-size: 0.85rem; flex-shrink: 0;')}
+                        <div class="thread-notif-content">
+                            <div class="thread-notif-title">
+                                <span>${escapeHtml(s.name || 'Pengguna')}</span>
+                                <span style="font-weight: 500; color: var(--text-muted); font-size: 0.78rem;"> ${actionText}</span>
+                            </div>
+                            <div class="thread-notif-preview">
+                                <i class="fa-solid ${iconClass}" style="color: ${iconColor}; font-size: 0.72rem; margin-right: 3px;"></i>
+                                "${escapeHtml(n.preview_text || '')}"
+                            </div>
+                            <div class="thread-notif-time">${n.created_at_human}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Klik salah satu notifikasi -> tandai dibaca & buka thread
+        async function onThreadNotificationClick(notificationIds, threadId) {
+            const dropdown = document.getElementById('threadNotifsDropdownMenu');
+            if (dropdown) dropdown.style.display = 'none';
+
+            const idsArray = Array.isArray(notificationIds) ? notificationIds : [notificationIds];
+
+            // Tandai notifikasi spesifik ini dibaca
+            try {
+                const res = await fetch('/api/blip/threads/notifications/read', {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify({ notification_ids: idsArray }),
+                });
+                const data = await res.json();
+                if (data.status === 'success' && data.unread_count !== undefined) {
+                    unreadThreadNotifsCount = data.unread_count;
+                } else {
+                    unreadThreadNotifsCount = Math.max(0, unreadThreadNotifsCount - idsArray.length);
+                }
+                updateThreadNotificationBadge();
+
+                // Update in memory cache
+                cachedThreadNotifs.forEach(item => {
+                    if (idsArray.includes(item.id)) {
+                        item.is_read = true;
+                    }
+                });
+            } catch (e) {}
+
+            // Buka tab thread dan buka detail thread
+            if (currentTab !== 'threads') {
+                switchTab('threads');
+            }
+            openThreadView(threadId);
+        }
+
+        // Tandai semua notifikasi thread dibaca
+        async function markAllThreadNotifsAsRead() {
+            try {
+                const res = await fetch('/api/blip/threads/notifications/read', {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify({}),
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    unreadThreadNotifsCount = 0;
+                    cachedThreadNotifs.forEach(n => n.is_read = true);
+                    updateThreadNotificationBadge();
+                    renderThreadNotificationsList();
+                }
+            } catch (e) {}
+        }
+
+        function updateThreadCharCounter(val) {
+            const counter = document.getElementById('createThreadCharCounter');
+            if (counter) {
+                counter.innerText = `${(val || '').length}/1000`;
+            }
+        }
+
+        function openCreateThreadModal() {
+            const modal = document.getElementById('createThreadModal');
+            const textarea = document.getElementById('createThreadInputContent');
+            const locBadge = document.getElementById('createThreadLocationBadge');
+            const avatarContainer = document.getElementById('createThreadUserAvatar');
+            const usernameEl = document.getElementById('createThreadUsername');
+
+            if (modal) modal.style.display = 'flex';
+            if (textarea) {
+                textarea.value = '';
+                textarea.style.height = 'auto';
+                setTimeout(() => textarea.focus(), 50);
+            }
+            updateThreadCharCounter('');
+
+            if (currentUser) {
+                if (avatarContainer) {
+                    avatarContainer.innerHTML = renderAvatarHtml(
+                        currentUser.name || 'User',
+                        currentUser.avatar_color,
+                        currentUser.avatar_url,
+                        '',
+                        'width: 40px; height: 40px; font-size: 1rem; border-radius: 50%;'
+                    );
+                }
+                if (usernameEl) {
+                    usernameEl.innerText = currentUser.username ? `@${currentUser.username}` : (currentUser.name || 'Anda');
+                }
+            }
+
+            if (locBadge) {
+                if (currentUser && currentUser.latitude && currentUser.longitude) {
+                    locBadge.innerHTML = `<i class="fa-solid fa-location-arrow"></i> <span>Lokasi aktif</span>`;
+                    locBadge.style.color = 'var(--primary)';
+                } else {
+                    locBadge.innerHTML = `<i class="fa-solid fa-location-arrow"></i> <span>Lokasi belum aktif</span>`;
+                    locBadge.style.color = 'var(--text-muted)';
+                }
+            }
+        }
+
+        function closeCreateThreadModal() {
+            const modal = document.getElementById('createThreadModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        async function handleCreateThreadSubmit(e) {
+            e.preventDefault();
+            const textarea = document.getElementById('createThreadInputContent');
+            const btn = document.getElementById('btnSubmitNewThread');
+            const content = (textarea ? textarea.value : '').trim();
+            if (!content) return;
+
+            if (btn) btn.disabled = true;
+
+            try {
+                const res = await fetch('/api/blip/threads', {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify({
+                        content: content,
+                        latitude: (currentUser && currentUser.latitude) ? currentUser.latitude : null,
+                        longitude: (currentUser && currentUser.longitude) ? currentUser.longitude : null,
+                    }),
+                });
+                const data = await res.json();
+                if (data.status === 'success' && data.thread) {
+                    closeCreateThreadModal();
+                    threadsList.unshift(data.thread);
+                    filterAndRenderThreads();
+                    openThreadView(data.thread.id);
+                } else {
+                    alert(data.message || 'Gagal memposting knot.');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Terjadi kesalahan koneksi saat memposting knot.');
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        let threadsNextCursor = null;
+        let threadsHasMore = false;
+        let threadsLoading = false;
+
+        function renderKnotSkeletonHtml() {
+            return `
+                ${[1, 2, 3, 4].map(() => `
+                    <div class="knot-skeleton-card">
+                        <div class="knot-skeleton-shimmer knot-skeleton-avatar"></div>
+                        <div class="knot-skeleton-body">
+                            <div class="knot-skeleton-shimmer knot-skeleton-line-title"></div>
+                            <div class="knot-skeleton-shimmer knot-skeleton-line-text1"></div>
+                            <div class="knot-skeleton-shimmer knot-skeleton-line-text2"></div>
+                        </div>
+                    </div>
+                `).join('')}
+            `;
+        }
+
+        async function loadThreads(isAppend = false) {
+            const container = document.getElementById('listContent');
+            if (!container) return;
+
+            if (threadsLoading) return;
+            if (isAppend && !threadsHasMore) return;
+
+            threadsLoading = true;
+
+            if (isAppend) {
+                const loader = document.getElementById('threadsInfiniteLoader');
+                if (loader) loader.style.display = 'block';
+            } else {
+                threadsNextCursor = null;
+                // Tampilkan Skeleton Shimmer Loading ala Twitter / Threads
+                container.innerHTML = renderKnotSkeletonHtml();
+            }
+
+            try {
+                let url = '/api/blip/threads';
+                const params = new URLSearchParams();
+                params.append('limit', 15);
+                if (isAppend && threadsNextCursor) {
+                    params.append('cursor', threadsNextCursor);
+                }
+                if (searchQuery) params.append('search', searchQuery);
+                if (currentUser && currentUser.latitude) params.append('latitude', currentUser.latitude);
+                if (currentUser && currentUser.longitude) params.append('longitude', currentUser.longitude);
+                url += `?${params.toString()}`;
+
+                const res = await fetch(url, { headers: getHeaders() });
+                if (!res.ok) {
+                    throw new Error(`HTTP error status ${res.status}`);
+                }
+                const data = await res.json();
+
+                if (data.status === 'success') {
+                    threadsNextCursor = data.next_cursor || null;
+                    threadsHasMore = !!data.has_more;
+
+                    if (isAppend) {
+                        const existingIds = new Set(threadsList.map(t => t.id));
+                        (data.threads || []).forEach(t => {
+                            if (!existingIds.has(t.id)) threadsList.push(t);
+                        });
+                    } else {
+                        threadsList = data.threads || [];
+                    }
+                    filterAndRenderThreads();
+                } else {
+                    throw new Error(data.message || 'Gagal memuat knot');
+                }
+            } catch (err) {
+                console.error('loadThreads error:', err);
+                if (!isAppend) {
+                    container.innerHTML = `
+                        <div style="text-align: center; padding: 2.5rem 1rem; color: var(--text-muted);">
+                            <i class="fa-solid fa-triangle-exclamation" style="font-size: 1.8rem; color: #ef4444; margin-bottom: 0.75rem;"></i>
+                            <p style="font-size: 0.88rem;">Gagal memuat knot.</p>
+                            <button type="button" class="btn btn-outline btn-sm" onclick="loadThreads()" style="margin-top: 0.75rem;">Coba Lagi</button>
+                        </div>
+                    `;
+                }
+            } finally {
+                threadsLoading = false;
+                const loader = document.getElementById('threadsInfiniteLoader');
+                if (loader) loader.style.display = 'none';
+            }
+        }
+
+        function filterAndRenderThreads() {
+            if (currentTab !== 'threads') return;
+            const container = document.getElementById('listContent');
+            if (!container) return;
+
+            let list = threadsList;
+            let html = '';
+
+            // Section Hasil Pencarian Pengguna untuk di-Add Friend (muncul saat user melakukan pencarian)
+            if (searchQuery) {
+                if (isSearchingThreadUsers) {
+                    html += `
+                        <div style="padding: 0.5rem 0.75rem; margin-bottom: 0.5rem; background: var(--bg-main); border-radius: 12px; border: 1px dashed var(--border-color);">
+                            <div style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.35rem;">
+                                <i class="fa-solid fa-spinner fa-spin"></i> Mencari pengguna...
+                            </div>
+                        </div>
+                    `;
+                } else if (threadSearchedUsers && threadSearchedUsers.length > 0) {
+                    html += `
+                        <div style="padding: 0.6rem 0.75rem 0.35rem; margin-bottom: 0.75rem; background: var(--bg-main); border-radius: 12px; border: 1px solid var(--border-subtle);">
+                            <div style="font-size: 0.72rem; font-weight: 700; color: var(--primary); text-transform: uppercase; margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: space-between;">
+                                <span><i class="fa-solid fa-user-plus"></i> Tambah Teman (${threadSearchedUsers.length})</span>
+                                <span style="font-size: 0.68rem; color: var(--text-muted); text-transform: none; font-weight: 500;">Klik untuk lihat profil</span>
+                            </div>
+                            <div class="knot-search-users-container" style="display: flex; flex-direction: column;">
+                    `;
+
+                    threadSearchedUsers.forEach(u => {
+                        const safeName = escapeHtml(u.name || 'User');
+                        const safeUsername = u.username ? `@${escapeHtml(u.username)}` : '';
+                        const genderIcon = renderGenderIcon(u.gender);
+                        const isMe = (currentUser && currentUser.id == u.id);
+
+                        let actionBtnHtml = '';
+                        if (!isMe) {
+                            if (u.is_friend || u.friendship_status === 'accepted') {
+                                actionBtnHtml = `<span class="knot-search-user-btn friend"><i class="fa-solid fa-check"></i> Teman</span>`;
+                            } else if (u.friendship_status === 'pending') {
+                                if (u.friendship_initiator == (currentUser ? currentUser.id : null)) {
+                                    actionBtnHtml = `<span class="knot-search-user-btn pending"><i class="fa-solid fa-clock"></i> Terkirim</span>`;
+                                } else {
+                                    actionBtnHtml = `<button type="button" class="knot-search-user-btn add" id="likeUserActionBtn_${u.id}" onclick="event.stopPropagation(); respondFriend(${u.friendship_id}, 'accept')"><i class="fa-solid fa-check"></i> Terima</button>`;
+                                }
+                            } else {
+                                actionBtnHtml = `<button type="button" class="knot-search-user-btn add" id="likeUserActionBtn_${u.id}" onclick="event.stopPropagation(); sendFriendRequest(${u.id})"><i class="fa-solid fa-user-plus"></i> Add</button>`;
+                            }
+                        }
+
+                        html += `
+                            <div class="knot-search-user-item" onclick="openNearbyUserInfo(${u.id})">
+                                <div style="display: flex; align-items: center; gap: 0.6rem; min-width: 0; flex: 1;">
+                                    ${renderAvatarHtml(u.name, u.avatar_color, u.avatar_url, '', 'width: 36px; height: 36px; font-size: 0.9rem; flex-shrink: 0;')}
+                                    <div style="min-width: 0; flex: 1;">
+                                        <div style="font-weight: 700; font-size: 0.88rem; color: var(--text-main); display: flex; align-items: center; gap: 0.35rem; line-height: 1.2;">
+                                            <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${safeName}</span>
+                                            ${genderIcon}
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.74rem; color: var(--text-muted); margin-top: 2px;">
+                                            ${safeUsername ? `<span style="color: var(--primary); font-weight: 500;">${safeUsername}</span><span>•</span>` : ''}
+                                            <span style="display: inline-flex; align-items: center; gap: 0.2rem;"><i class="fa-solid fa-location-arrow" style="font-size: 0.68rem;"></i> ${escapeHtml(u.distance_formatted || 'Jarak ?')}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                ${actionBtnHtml}
+                            </div>
+                        `;
+                    });
+
+                    // Tombol Muat Lebih Banyak Pengguna (Lazy load user search)
+                    if (threadSearchUserHasMore) {
+                        html += `
+                            <div style="text-align: center; padding: 0.4rem 0 0.25rem;">
+                                <button type="button" class="btn btn-ghost btn-sm" onclick="searchUsersInThreadTab('${escapeHtml(searchQuery)}', true)" style="font-size: 0.74rem; color: var(--primary); padding: 0.25rem 0.6rem;" ${isSearchingMoreUsers ? 'disabled' : ''}>
+                                    ${isSearchingMoreUsers ? '<i class="fa-solid fa-spinner fa-spin"></i> Memuat...' : '<i class="fa-solid fa-chevron-down"></i> Muat user lainnya'}
+                                </button>
+                            </div>
+                        `;
+                    }
+
+                    html += `
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+
+            if (list.length === 0) {
+                html += `
+                    <div style="text-align: center; padding: 3rem 1.5rem; color: var(--text-muted);">
+                        <div style="width: 64px; height: 64px; border-radius: 50%; background: var(--item-active); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 1rem;">
+                            <span class="knot-icon-mask" style="font-size: 2rem; color: var(--primary);"></span>
+                        </div>
+                        <h4 style="font-weight: 700; font-size: 1.05rem; color: var(--text-main); margin-bottom: 0.35rem;">Belum ada postingan knot</h4>
+                        <p style="font-size: 0.84rem; line-height: 1.45; max-width: 280px; margin: 0 auto 1.25rem;">
+                            ${searchQuery ? 'Tidak ada postingan knot yang cocok dengan pencarian.' : 'Jadilah yang pertama membuat postingan terbuka untuk orang-orang di sekitarmu!'}
+                        </p>
+                        ${!searchQuery ? `<button type="button" class="btn btn-primary btn-sm" onclick="openCreateThreadModal()"><i class="fa-solid fa-pen-to-square"></i> Buat Knot Pertama</button>` : ''}
+                    </div>
+                `;
+            } else {
+                list.forEach(t => {
+                    html += renderKnotCardHtml(t);
+                });
+            }
+
+            // Infinite Loader untuk Scroll Postingan Knot
+            html += `
+                <div id="threadsInfiniteLoader" style="display: none; text-align: center; padding: 1rem; color: var(--text-muted); font-size: 0.8rem;">
+                    <i class="fa-solid fa-spinner fa-spin"></i> Memuat knot lainnya...
+                </div>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        async function openThreadView(threadId) {
+            activeThreadId = threadId;
+
+            // Close chat if open
+            if (activeChatFriendId) {
+                closeChat();
+            }
+
+            // Pastikan class mobile chat bersih saat membuka knot di HP
+            document.body.classList.remove('in-chat-mobile');
+            document.body.classList.add('in-thread-mobile');
+            try {
+                history.pushState({ inThread: true, threadId }, '');
+            } catch(e) {}
+
+            // Bersihkan teks draft balasan dari knot sebelumnya
+            const replyInputEl = document.getElementById('threadReplyInput');
+            if (replyInputEl) replyInputEl.value = '';
+
+            // Switch Column 3 views
+            const emptyState = document.getElementById('chatEmptyState');
+            const chatInterface = document.getElementById('activeChatInterface');
+            const threadInterface = document.getElementById('activeThreadInterface');
+
+            if (emptyState) emptyState.style.display = 'none';
+            if (chatInterface) chatInterface.style.display = 'none';
+            if (threadInterface) threadInterface.style.display = 'flex';
+
+            // Highlight card in list
+            document.querySelectorAll('.thread-card').forEach(el => el.classList.remove('active-thread'));
+            const activeCard = document.getElementById(`threadCard_${threadId}`);
+            if (activeCard) activeCard.classList.add('active-thread');
+
+            const opContainer = document.getElementById('threadOriginalPostContainer');
+            const repliesContainer = document.getElementById('threadRepliesListContainer');
+            const repliesCountHeader = document.getElementById('threadRepliesHeaderCount');
+
+            if (opContainer) {
+                opContainer.innerHTML = `
+                    <div style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                        <i class="fa-solid fa-spinner fa-spin" style="font-size: 1.5rem; color: var(--primary);"></i>
+                    </div>
+                `;
+            }
+            if (repliesContainer) repliesContainer.innerHTML = '';
+
+            try {
+                let url = `/api/blip/threads/${threadId}`;
+                const params = new URLSearchParams();
+                if (currentUser && currentUser.latitude) params.append('latitude', currentUser.latitude);
+                if (currentUser && currentUser.longitude) params.append('longitude', currentUser.longitude);
+                if (params.toString()) url += `?${params.toString()}`;
+
+                const res = await fetch(url, { headers: getHeaders() });
+                if (!res.ok) {
+                    throw new Error(`HTTP error status ${res.status}`);
+                }
+                const data = await res.json();
+
+                if (data.status === 'success' && data.thread) {
+                    const t = data.thread;
+                    const u = t.user || {};
+                    const isMy = t.is_mine;
+                    const isLiked = t.is_liked;
+                    const genderIcon = renderGenderIcon(u.gender);
+                    const ageBadge = (u.age && !isNaN(u.age)) ? `<span class="user-tag age-badge">${u.age} th</span>` : '';
+                    const usernameHandle = u.username ? `<span class="thread-author-handle">@${escapeHtml(u.username)}</span>` : '';
+
+                    if (opContainer) {
+                        opContainer.innerHTML = `
+                            <div class="thread-op-card">
+                                <div class="thread-header">
+                                    <div class="thread-author">
+                                        <div onclick="openNearbyUserInfo(${u.id || t.user_id})" style="cursor: pointer;" title="Lihat profil ${escapeHtml(u.name || 'User')}">
+                                            ${renderAvatarHtml(u.name || 'User', u.avatar_color, u.avatar_url, '', 'width: 44px; height: 44px; font-size: 1.1rem; flex-shrink: 0;')}
+                                        </div>
+                                        <div style="min-width: 0; flex: 1;">
+                                            <div class="thread-author-name" onclick="openNearbyUserInfo(${u.id || t.user_id})" style="cursor: pointer;" title="Lihat profil ${escapeHtml(u.name || 'User')}">
+                                                <span>${escapeHtml(u.name || 'User')}</span>
+                                                ${genderIcon}
+                                                ${ageBadge}
+                                            </div>
+                                            <div style="font-size: 0.76rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.35rem;">
+                                                ${usernameHandle ? `<span>${usernameHandle}</span><span>•</span>` : ''}
+                                                <span>${t.created_at_human}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <span class="thread-distance-badge" style="font-size: 0.74rem; padding: 0.25rem 0.65rem;" title="Jarak saat memposting">
+                                        <i class="fa-solid fa-location-arrow"></i> ${escapeHtml(t.distance_formatted)}
+                                    </span>
+                                </div>
+
+                                <div class="thread-content-text">${renderThreadContentWithMentions(t.content)}</div>
+
+                                <div class="thread-footer" style="padding-top: 0.65rem; margin-top: 0.65rem;">
+                                    <div class="thread-actions-group">
+                                        <button type="button" class="thread-action-pill ${isLiked ? 'liked' : ''}" id="opLikeBtn" data-thread-like-btn="${t.id}" onclick="toggleLikeThread(${t.id}, true)" style="font-size: 0.85rem; padding: 0.3rem 0.65rem;" title="${isLiked ? 'Batal Suka' : 'Suka'}">
+                                            <i class="fa-${isLiked ? 'solid' : 'regular'} fa-heart"></i>
+                                            <span id="opLikeCount" class="thread-like-count-click" data-thread-like-count="${t.id}" onclick="${t.likes_count > 0 ? `event.stopPropagation(); openThreadLikesModal(${t.id})` : ''}" title="${t.likes_count > 0 ? 'Lihat siapa yang menyukai' : 'Suka'}">${t.likes_count}</span>
+                                        </button>
+                                        <span class="thread-action-pill" style="cursor: default; font-size: 0.85rem;">
+                                            <i class="fa-regular fa-comment"></i>
+                                            <span id="opReplyCount">${t.replies_count}</span>
+                                        </span>
+                                    </div>
+                                    ${isMy ? `
+                                        <button type="button" class="thread-action-pill danger" onclick="confirmDeleteThread(${t.id})" title="Hapus Postingan" style="font-size: 0.82rem;">
+                                            <i class="fa-regular fa-trash-can"></i> <span>Hapus</span>
+                                        </button>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        `;
+                    }
+
+                    if (repliesCountHeader) {
+                        repliesCountHeader.innerText = `Balasan (${(data.replies || []).length})`;
+                    }
+
+                    renderRepliesList(data.replies || []);
+
+                    // Focus reply input
+                    const replyInput = document.getElementById('threadReplyInput');
+                    if (replyInput) replyInput.focus();
+                }
+            } catch (err) {
+                console.error(err);
+                if (opContainer) {
+                    opContainer.innerHTML = `<div style="color: #ef4444; padding: 1rem; text-align: center;">Gagal memuat detail knot.</div>`;
+                }
+            }
+        }
+
+        function renderRepliesList(replies) {
+            const container = document.getElementById('threadRepliesListContainer');
+            if (!container) return;
+
+            if (!replies || replies.length === 0) {
+                container.innerHTML = `
+                    <div class="thread-empty-replies">
+                        <i class="fa-regular fa-comments"></i>
+                        <h4>Belum ada balasan</h4>
+                        <p>Jadilah yang pertama memberikan respon pada knot ini!</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = replies.map(r => {
+                const u = r.user || {};
+                const isMy = r.is_mine;
+                const genderIcon = renderGenderIcon(u.gender);
+                const ageBadge = (u.age && !isNaN(u.age)) ? `<span class="user-tag age-badge">${u.age} th</span>` : '';
+                const usernameHandle = u.username ? `@${escapeHtml(u.username)}` : '';
+
+                return `
+                    <div class="thread-reply-item" id="replyItem_${r.id}">
+                        <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem;">
+                            <div style="display: flex; align-items: flex-start; gap: 0.6rem; min-width: 0; flex: 1;">
+                                <div onclick="openNearbyUserInfo(${u.id || r.user_id})" style="cursor: pointer;" title="Lihat profil ${escapeHtml(u.name || 'User')}">
+                                    ${renderAvatarHtml(u.name || 'User', u.avatar_color, u.avatar_url, '', 'width: 34px; height: 34px; font-size: 0.85rem; flex-shrink: 0;')}
+                                </div>
+                                <div style="min-width: 0; flex: 1;">
+                                    <div style="display: flex; align-items: center; gap: 0.35rem; line-height: 1.2;">
+                                        <span style="font-weight: 700; font-size: 0.88rem; color: var(--text-main); cursor: pointer;" onclick="openNearbyUserInfo(${u.id || r.user_id})" title="Lihat profil ${escapeHtml(u.name || 'User')}">${escapeHtml(u.name || 'User')}</span>
+                                        ${genderIcon}
+                                        ${ageBadge}
+                                    </div>
+                                    <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; display: flex; align-items: center; gap: 0.25rem;">
+                                        ${usernameHandle ? `<span>${usernameHandle}</span><span>•</span>` : ''}
+                                        <span>${r.created_at_human}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0;">
+                                <span class="thread-distance-badge" style="font-size: 0.68rem; padding: 0.15rem 0.45rem;" title="Jarak pembalas">
+                                    <i class="fa-solid fa-location-arrow"></i> ${escapeHtml(r.distance_formatted)}
+                                </span>
+                                ${isMy ? `
+                                    <button type="button" class="thread-action-pill danger" onclick="confirmDeleteReply(${r.id})" style="padding: 0.15rem 0.35rem; font-size: 0.75rem;" title="Hapus Balasan">
+                                        <i class="fa-regular fa-trash-can"></i>
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </div>
+                        <div class="thread-reply-content">${renderThreadContentWithMentions(r.content)}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function closeThreadView() {
+            activeThreadId = null;
+            document.body.classList.remove('in-thread-mobile');
+
+            const emptyState = document.getElementById('chatEmptyState');
+            const chatInterface = document.getElementById('activeChatInterface');
+            const threadInterface = document.getElementById('activeThreadInterface');
+
+            if (threadInterface) threadInterface.style.display = 'none';
+
+            if (activeChatFriendId) {
+                if (chatInterface) chatInterface.style.display = 'flex';
+                if (emptyState) emptyState.style.display = 'none';
+            } else {
+                if (chatInterface) chatInterface.style.display = 'none';
+                if (emptyState) emptyState.style.display = 'flex';
+            }
+
+            document.querySelectorAll('.thread-card').forEach(el => el.classList.remove('active-thread'));
+        }
+
+        async function handleSendReply(e) {
+            e.preventDefault();
+            if (!activeThreadId) return;
+
+            const input = document.getElementById('threadReplyInput');
+            const content = (input ? input.value : '').trim();
+            if (!content) return;
+
+            try {
+                const res = await fetch(`/api/blip/threads/${activeThreadId}/replies`, {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify({
+                        content: content,
+                        latitude: (currentUser && currentUser.latitude) ? currentUser.latitude : null,
+                        longitude: (currentUser && currentUser.longitude) ? currentUser.longitude : null,
+                    }),
+                });
+                const data = await res.json();
+                if (data.status === 'success' && data.reply) {
+                    input.value = '';
+
+                    // Update UI in detail view
+                    const repliesContainer = document.getElementById('threadRepliesListContainer');
+                    const emptyNotice = repliesContainer ? repliesContainer.querySelector('.thread-empty-replies') : null;
+                    if (emptyNotice) emptyNotice.remove();
+
+                    const u = data.reply.user || {};
+                    const genderIcon = renderGenderIcon(u.gender);
+                    const ageBadge = (u.age && !isNaN(u.age)) ? `<span class="user-tag age-badge">${u.age} th</span>` : '';
+                    const usernameHandle = u.username ? `@${escapeHtml(u.username)}` : '';
+
+                    const replyHtml = `
+                        <div class="thread-reply-item" id="replyItem_${data.reply.id}">
+                            <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem;">
+                                <div style="display: flex; align-items: flex-start; gap: 0.6rem; min-width: 0; flex: 1;">
+                                    <div onclick="openNearbyUserInfo(${u.id || data.reply.user_id})" style="cursor: pointer;" title="Lihat profil ${escapeHtml(u.name || 'User')}">
+                                        ${renderAvatarHtml(u.name || 'User', u.avatar_color, u.avatar_url, '', 'width: 34px; height: 34px; font-size: 0.85rem; flex-shrink: 0;')}
+                                    </div>
+                                    <div style="min-width: 0; flex: 1;">
+                                        <div style="display: flex; align-items: center; gap: 0.35rem; line-height: 1.2;">
+                                            <span style="font-weight: 700; font-size: 0.88rem; color: var(--text-main); cursor: pointer;" onclick="openNearbyUserInfo(${u.id || data.reply.user_id})" title="Lihat profil ${escapeHtml(u.name || 'User')}">${escapeHtml(u.name || 'User')}</span>
+                                            ${genderIcon}
+                                            ${ageBadge}
+                                        </div>
+                                        <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; display: flex; align-items: center; gap: 0.25rem;">
+                                            ${usernameHandle ? `<span>${usernameHandle}</span><span>•</span>` : ''}
+                                            <span>${data.reply.created_at_human}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0;">
+                                    <span class="thread-distance-badge" style="font-size: 0.68rem; padding: 0.15rem 0.45rem;" title="Jarak pembalas">
+                                        <i class="fa-solid fa-location-arrow"></i> ${escapeHtml(data.reply.distance_formatted)}
+                                    </span>
+                                    <button type="button" class="thread-action-pill danger" onclick="confirmDeleteReply(${data.reply.id})" style="padding: 0.15rem 0.35rem; font-size: 0.75rem;" title="Hapus Balasan">
+                                        <i class="fa-regular fa-trash-can"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="thread-reply-content">${renderThreadContentWithMentions(data.reply.content)}</div>
+                        </div>
+                    `;
+
+                    if (repliesContainer) {
+                        repliesContainer.insertAdjacentHTML('beforeend', replyHtml);
+                        repliesContainer.lastElementChild.scrollIntoView({ behavior: 'smooth' });
+                    }
+
+                    // Update counts
+                    const repliesCount = data.replies_count;
+                    const opReplyCount = document.getElementById('opReplyCount');
+                    if (opReplyCount) opReplyCount.innerText = repliesCount;
+                    const threadCardReplyCount = document.querySelectorAll(`[data-thread-reply-count="${activeThreadId}"], #threadCardReplyCount_${activeThreadId}`);
+                    threadCardReplyCount.forEach(el => el.innerText = `${repliesCount}`);
+
+                    const repliesCountHeader = document.getElementById('threadRepliesHeaderCount');
+                    if (repliesCountHeader) repliesCountHeader.innerText = `Balasan (${repliesCount})`;
+
+                    // Update in memory list
+                    const found = threadsList.find(t => parseInt(t.id, 10) === parseInt(activeThreadId, 10));
+                    if (found) found.replies_count = repliesCount;
+                } else {
+                    alert(data.message || 'Gagal mengirim balasan.');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Terjadi kesalahan koneksi saat mengirim balasan.');
+            }
+        }
+
+        const pendingLikesSet = new Set();
+
+        function syncLikeUI(threadId, isLiked, count) {
+            const numId = parseInt(threadId, 10);
+            if (!numId) return;
+
+            const safeCount = Math.max(0, parseInt(count, 10) || 0);
+
+            // 1. Update semua tombol like kartu (di feed utama, profil kontak, dll.)
+            const likeBtns = document.querySelectorAll(`[data-thread-like-btn="${numId}"], #threadCardLikeBtn_${numId}`);
+            likeBtns.forEach(btn => {
+                btn.classList.toggle('liked', !!isLiked);
+                btn.title = isLiked ? 'Batal Suka' : 'Suka';
+                const icon = btn.querySelector('i');
+                if (icon) {
+                    icon.className = `fa-${isLiked ? 'solid' : 'regular'} fa-heart`;
+                }
+            });
+
+            // 2. Update semua teks hitungan like
+            const countEls = document.querySelectorAll(`[data-thread-like-count="${numId}"], #threadCardLikeCount_${numId}`);
+            countEls.forEach(el => {
+                el.innerText = `${safeCount}`;
+                el.title = safeCount > 0 ? 'Lihat siapa yang menyukai' : 'Suka';
+                if (safeCount > 0) {
+                    el.onclick = (e) => { e.stopPropagation(); openThreadLikesModal(numId); };
+                } else {
+                    el.onclick = null;
+                }
+            });
+
+            // 3. Update detail Knot jika sedang dibuka (baik activeThreadId bertipe string atau number)
+            if (activeThreadId && parseInt(activeThreadId, 10) === numId) {
+                const opBtn = document.getElementById('opLikeBtn');
+                const opCount = document.getElementById('opLikeCount');
+                if (opBtn) {
+                    opBtn.classList.toggle('liked', !!isLiked);
+                    opBtn.title = isLiked ? 'Batal Suka' : 'Suka';
+                    const icon = opBtn.querySelector('i');
+                    if (icon) icon.className = `fa-${isLiked ? 'solid' : 'regular'} fa-heart`;
+                }
+                if (opCount) {
+                    opCount.innerText = `${safeCount}`;
+                    opCount.title = safeCount > 0 ? 'Lihat siapa yang menyukai' : 'Suka';
+                    if (safeCount > 0) {
+                        opCount.onclick = (e) => { e.stopPropagation(); openThreadLikesModal(numId); };
+                    } else {
+                        opCount.onclick = null;
+                    }
+                }
+            }
+
+            // 4. Update data cache di memori
+            const found = threadsList.find(t => parseInt(t.id, 10) === numId);
+            if (found) {
+                found.is_liked = !!isLiked;
+                found.likes_count = safeCount;
+            }
+        }
+
+        async function toggleLikeThread(threadId, fromDetail = false) {
+            const numId = parseInt(threadId, 10);
+            if (!numId) return;
+
+            // Mencegah spam klik berulang saat request masih terbang di background
+            if (pendingLikesSet.has(numId)) return;
+            pendingLikesSet.add(numId);
+
+            // Deteksi status saat ini dari tombol atau memori
+            let currentLiked = false;
+            let currentCount = 0;
+
+            const existingBtn = document.querySelector(`[data-thread-like-btn="${numId}"], #threadCardLikeBtn_${numId}`)
+                || (activeThreadId && parseInt(activeThreadId, 10) === numId ? document.getElementById('opLikeBtn') : null);
+
+            if (existingBtn) {
+                currentLiked = existingBtn.classList.contains('liked');
+            } else {
+                const found = threadsList.find(t => parseInt(t.id, 10) === numId);
+                if (found) currentLiked = !!found.is_liked;
+            }
+
+            const existingCountEl = document.querySelector(`[data-thread-like-count="${numId}"], #threadCardLikeCount_${numId}`)
+                || (activeThreadId && parseInt(activeThreadId, 10) === numId ? document.getElementById('opLikeCount') : null);
+
+            if (existingCountEl) {
+                currentCount = parseInt(existingCountEl.innerText, 10) || 0;
+            } else {
+                const found = threadsList.find(t => parseInt(t.id, 10) === numId);
+                if (found) currentCount = found.likes_count || 0;
+            }
+
+            // OPTIMISTIC UPDATE: Ubah warna dan angka seketika tanpa delay jaringan!
+            const optimisticLiked = !currentLiked;
+            const optimisticCount = optimisticLiked ? currentCount + 1 : Math.max(0, currentCount - 1);
+            syncLikeUI(numId, optimisticLiked, optimisticCount);
+
+            try {
+                const res = await fetch(`/api/blip/threads/${numId}/like`, {
+                    method: 'POST',
+                    headers: getHeaders(),
+                });
+                const data = await res.json();
+                console.log('[Like] Response:', res.status, data);
+                if (data.status === 'success') {
+                    // Sinkronisasi dengan angka valid dari server
+                    syncLikeUI(numId, data.is_liked, data.likes_count);
+                } else {
+                    // Rollback jika server mengembalikan error (misal rate limit)
+                    syncLikeUI(numId, currentLiked, currentCount);
+                    console.warn('[Like] Failed:', data.message);
+                }
+            } catch (err) {
+                console.error('[Like] Fetch error:', err);
+                // Rollback jika terjadi kendala koneksi
+                syncLikeUI(numId, currentLiked, currentCount);
+            } finally {
+                pendingLikesSet.delete(numId);
+            }
+        }
+
+        async function openThreadLikesModal(threadId) {
+            const numId = parseInt(threadId, 10);
+            if (!numId) return;
+
+            const countEl = document.querySelector(`[data-thread-like-count="${numId}"]`)
+                || (activeThreadId && parseInt(activeThreadId, 10) === numId ? document.getElementById('opLikeCount') : null);
+            const currentCount = countEl ? (parseInt(countEl.innerText, 10) || 0) : 0;
+
+            // Jika belum ada yang suka, jangan buka modal
+            if (currentCount === 0) {
+                return;
+            }
+
+            const modal = document.getElementById('threadLikesModal');
+            const container = document.getElementById('threadLikesListContainer');
+            const title = document.getElementById('threadLikesModalTitle');
+
+            if (modal) modal.style.display = 'flex';
+            if (title) title.innerText = 'Disukai oleh...';
+            if (container) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 2rem 1rem; color: var(--text-muted); font-size: 0.85rem;">
+                        <i class="fa-solid fa-spinner fa-spin"></i> Memuat daftar...
+                    </div>
+                `;
+            }
+
+            try {
+                let url = `/api/blip/threads/${threadId}/likes`;
+                if (currentUser && currentUser.latitude && currentUser.longitude) {
+                    url += `?latitude=${currentUser.latitude}&longitude=${currentUser.longitude}`;
+                }
+                const res = await fetch(url, { headers: getHeaders() });
+                const data = await res.json();
+
+                if (data.status === 'success') {
+                    if (title) title.innerText = `Disukai oleh (${data.likes_count || 0})`;
+
+                    if (!data.users || data.users.length === 0) {
+                        container.innerHTML = `
+                            <div style="text-align: center; padding: 2.5rem 1rem; color: var(--text-muted);">
+                                <i class="fa-regular fa-heart" style="font-size: 1.8rem; margin-bottom: 0.5rem; opacity: 0.5;"></i>
+                                <p style="font-size: 0.88rem; margin: 0;">Belum ada yang menyukai postingan ini.</p>
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    let listHtml = '';
+                    data.users.forEach(u => {
+                        const genderIcon = renderGenderIcon(u.gender);
+                        const ageBadge = (u.age && !isNaN(u.age)) ? `<span class="user-tag age-badge">${u.age} th</span>` : '';
+                        const usernameHandle = u.username ? `@${escapeHtml(u.username)}` : '';
+                        const isMe = u.is_me;
+
+                        let actionBtnHtml = '';
+                        if (!isMe) {
+                            if (u.friendship_status === 'accepted') {
+                                actionBtnHtml = `<span class="knot-search-user-btn friend"><i class="fa-solid fa-check"></i> Teman</span>`;
+                            } else if (u.friendship_status === 'pending') {
+                                if (u.friendship_initiator == (currentUser ? currentUser.id : null)) {
+                                    actionBtnHtml = `<span class="knot-search-user-btn pending"><i class="fa-solid fa-clock"></i> Terkirim</span>`;
+                                } else {
+                                    actionBtnHtml = `<button type="button" class="knot-search-user-btn add" id="likeUserActionBtn_${u.id}" onclick="event.stopPropagation(); respondFriend(${u.friendship_id}, 'accept')"><i class="fa-solid fa-check"></i> Terima</button>`;
+                                }
+                            } else {
+                                actionBtnHtml = `<button type="button" class="knot-search-user-btn add" id="likeUserActionBtn_${u.id}" onclick="event.stopPropagation(); sendFriendRequest(${u.id})"><i class="fa-solid fa-user-plus"></i> Add</button>`;
+                            }
+                        }
+
+                        listHtml += `
+                            <div class="thread-like-user-row" onclick="closeThreadLikesModal(); openNearbyUserInfo(${u.id})">
+                                <div class="thread-like-user-meta">
+                                    ${renderAvatarHtml(u.name || 'User', u.avatar_color, u.avatar_url, '', 'width: 38px; height: 38px; font-size: 0.95rem; flex-shrink: 0;')}
+                                    <div style="min-width: 0; flex: 1;">
+                                        <div style="font-weight: 700; font-size: 0.88rem; color: var(--text-main); display: flex; align-items: center; gap: 0.35rem; line-height: 1.2;">
+                                            <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(u.name || 'User')}</span>
+                                            ${isMe ? '<span style="font-size: 0.7rem; color: var(--text-muted); font-weight: 500;">(Anda)</span>' : ''}
+                                            ${genderIcon}
+                                            ${ageBadge}
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.74rem; color: var(--text-muted); margin-top: 2px;">
+                                            ${usernameHandle ? `<span style="color: var(--primary); font-weight: 500;">${usernameHandle}</span><span>•</span>` : ''}
+                                            <span style="display: inline-flex; align-items: center; gap: 0.2rem;"><i class="fa-solid fa-location-arrow" style="font-size: 0.65rem;"></i> ${escapeHtml(u.distance_formatted || 'Jarak ?')}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div>
+                                    ${actionBtnHtml}
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                    container.innerHTML = listHtml;
+                } else {
+                    throw new Error(data.message || 'Gagal memuat');
+                }
+            } catch (err) {
+                console.error('openThreadLikesModal error:', err);
+                if (container) {
+                    container.innerHTML = `
+                        <div style="text-align: center; padding: 2rem 1rem; color: var(--text-muted);">
+                            <p style="font-size: 0.85rem; color: #ef4444; margin-bottom: 0.5rem;">Gagal memuat daftar penyuka.</p>
+                            <button type="button" class="btn btn-outline btn-sm" onclick="openThreadLikesModal(${threadId})">Coba Lagi</button>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        function closeThreadLikesModal() {
+            const modal = document.getElementById('threadLikesModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        async function confirmDeleteThread(threadId) {
+            Swal.fire({
+                title: 'Hapus Postingan Knot?',
+                text: 'Postingan knot ini beserta seluruh balasannya akan dihapus permanen.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Ya, Hapus',
+                cancelButtonText: 'Batal',
+                customClass: {
+                    popup: 'blip-swal-popup',
+                    title: 'blip-swal-title',
+                    htmlContainer: 'blip-swal-text',
+                    actions: 'blip-swal-actions',
+                    confirmButton: 'blip-swal-confirm-btn',
+                    cancelButton: 'blip-swal-cancel-btn',
+                },
+                buttonsStyling: false,
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    try {
+                        const res = await fetch(`/api/blip/threads/${threadId}`, {
+                            method: 'DELETE',
+                            headers: getHeaders(),
+                        });
+                        const data = await res.json();
+                        if (data.status === 'success') {
+                            threadsList = threadsList.filter(t => parseInt(t.id, 10) !== parseInt(threadId, 10));
+                            filterAndRenderThreads();
+                            if (activeThreadId && parseInt(activeThreadId, 10) === parseInt(threadId, 10)) {
+                                closeThreadView();
+                            }
+                        } else {
+                            alert(data.message || 'Gagal menghapus knot.');
+                        }
+                    } catch (err) {
+                        console.error(err);
+                    }
+                }
+            });
+        }
+
+        async function confirmDeleteReply(replyId) {
+            Swal.fire({
+                title: 'Hapus Balasan?',
+                text: 'Balasan ini akan dihapus permanen.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Ya, Hapus',
+                cancelButtonText: 'Batal',
+                customClass: {
+                    popup: 'blip-swal-popup',
+                    title: 'blip-swal-title',
+                    htmlContainer: 'blip-swal-text',
+                    actions: 'blip-swal-actions',
+                    confirmButton: 'blip-swal-confirm-btn',
+                    cancelButton: 'blip-swal-cancel-btn',
+                },
+                buttonsStyling: false,
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    try {
+                        const res = await fetch(`/api/blip/threads/replies/${replyId}`, {
+                            method: 'DELETE',
+                            headers: getHeaders(),
+                        });
+                        const data = await res.json();
+                        if (data.status === 'success') {
+                            const item = document.getElementById(`replyItem_${replyId}`);
+                            if (item) item.remove();
+
+                            const count = data.replies_count;
+                            const opReplyCount = document.getElementById('opReplyCount');
+                            if (opReplyCount) opReplyCount.innerText = count;
+
+                            const cardReplyCounts = document.querySelectorAll(`[data-thread-reply-count="${activeThreadId}"], #threadCardReplyCount_${activeThreadId}`);
+                            cardReplyCounts.forEach(el => el.innerText = `${count}`);
+
+                            const repliesCountHeader = document.getElementById('threadRepliesHeaderCount');
+                            if (repliesCountHeader) repliesCountHeader.innerText = `Balasan (${count})`;
+
+                            const found = threadsList.find(t => parseInt(t.id, 10) === parseInt(activeThreadId, 10));
+                            if (found) found.replies_count = count;
+                        } else {
+                            alert(data.message || 'Gagal menghapus balasan.');
+                        }
+                    } catch (err) {
+                        console.error(err);
+                    }
+                }
+            });
+        }
+
         // Shortcut tombol Escape (Esc)
         window.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' || e.key === 'Esc') {
                 const lightbox = document.getElementById('imageLightboxModal');
                 if (lightbox && lightbox.style.display === 'flex') {
                     closeImageLightbox();
+                    return;
+                }
+                const threadModal = document.getElementById('createThreadModal');
+                if (threadModal && threadModal.style.display === 'flex') {
+                    closeCreateThreadModal();
+                    return;
+                }
+                const threadLikesModal = document.getElementById('threadLikesModal');
+                if (threadLikesModal && threadLikesModal.style.display === 'flex') {
+                    closeThreadLikesModal();
+                    return;
+                }
+                // Jika sedang di mode detail thread, tutup jendela thread
+                if (activeThreadId) {
+                    closeThreadView();
                     return;
                 }
                 // Jika sedang di mode select pesan, batalkan mode select terlebih dahulu
@@ -2884,6 +4952,8 @@
         window.addEventListener('popstate', (e) => {
             if (activeChatFriendId) {
                 closeChat();
+            } else if (activeThreadId) {
+                closeThreadView();
             } else {
                 const contactPanel = document.getElementById('contactInfoPanel');
                 if (contactPanel && contactPanel.classList.contains('open')) {
@@ -2895,4 +4965,7 @@
         window.addEventListener('DOMContentLoaded', () => {
             initApp();
             setupScrollListeners();
+            setupMentionAutocomplete('createThreadInputContent', 'createThreadMentionDropdown');
+            setupMentionAutocomplete('threadReplyInput', 'threadReplyMentionDropdown');
+            fetchThreadNotifications();
         });

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <!-- Knot 'K' Single Continuous Line (Transparan tanpa background) -->
+  <path d="M 195 400
+       C 155 400, 135 345, 155 256
+       C 175 167, 195 112, 235 112
+       C 265 112, 275 145, 255 210
+       L 345 125
+       C 375 95, 415 135, 385 170
+       L 290 270
+       L 395 365
+       C 425 395, 385 435, 355 405
+       L 235 295
+       C 215 355, 225 400, 195 400 Z" fill="none" stroke="currentColor" stroke-width="32" stroke-linecap="round" stroke-linejoin="round" />
+</svg>
