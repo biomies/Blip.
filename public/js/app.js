@@ -2014,12 +2014,20 @@
         let chatPollingInterval = null;
         function startChatPolling() {
             stopChatPolling();
-            // Polling cadangan (setiap 2.5s) sebagai safety net agar obrolan tetap realtime jika websocket terputus/reconnect
+            // Jika WebSocket Reverb sudah terhubung normal, matikan polling HTTP untuk hemat RAM & traffic
+            if (echoPusher && echoPusher.connection && echoPusher.connection.state === 'connected') {
+                return;
+            }
+            // Fallback polling lambat (hanya aktif jika WebSocket gagal/terputus)
             chatPollingInterval = setInterval(() => {
                 if (activeChatFriendId) {
+                    if (echoPusher && echoPusher.connection && echoPusher.connection.state === 'connected') {
+                        stopChatPolling();
+                        return;
+                    }
                     pollActiveChat();
                 }
-            }, 2500);
+            }, 8000);
         }
 
         function stopChatPolling() {
