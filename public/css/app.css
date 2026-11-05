@@ -2897,11 +2897,11 @@
         }
 
         .threads-compose-submit-btn {
-            background: #111827;
+            background: var(--primary);
             color: #ffffff;
             border: none;
             border-radius: 999px;
-            padding: 0.5rem 1.25rem;
+            padding: 0.45rem 1.15rem;
             font-size: 0.88rem;
             font-weight: 700;
             cursor: pointer;
@@ -2912,7 +2912,7 @@
         }
 
         .threads-compose-submit-btn:hover {
-            background: #000000;
+            background: var(--primary-hover);
             transform: scale(1.02);
         }
 
@@ -3390,6 +3390,53 @@
             }
 
             /* 5. Modals and Popups on Android */
+            #createThreadModal.onboarding-overlay {
+                padding: 0 !important;
+                align-items: stretch !important;
+                justify-content: stretch !important;
+            }
+
+            #createThreadModal .threads-compose-modal {
+                width: 100% !important;
+                max-width: 100% !important;
+                height: 100% !important;
+                height: 100dvh !important;
+                border-radius: 0 !important;
+                border: none !important;
+                display: flex !important;
+                flex-direction: column !important;
+            }
+
+            #createThreadModal .threads-compose-body {
+                flex: 1 !important;
+                min-height: 0 !important;
+                padding: 1rem !important;
+            }
+
+            #createThreadModal .threads-compose-textarea {
+                flex: 1 !important;
+                min-height: 140px !important;
+                height: auto !important;
+                font-size: 1.05rem !important;
+            }
+
+            #createThreadModal .threads-compose-footer {
+                padding: 0.65rem 1rem !important;
+                background: #ffffff !important;
+                border-top: 1px solid var(--border-color) !important;
+            }
+
+            #createThreadModal .mention-autocomplete-dropdown {
+                position: static !important;
+                max-height: 40vh !important;
+                border: none !important;
+                box-shadow: none !important;
+                border-top: 1px solid var(--border-subtle) !important;
+                border-radius: 0 !important;
+                margin-top: 0.5rem !important;
+                padding: 0 !important;
+            }
+
             .onboarding-card,
             .avatar-crop-dialog,
             .swal2-popup.blip-swal-popup {

@@ -641,12 +641,16 @@
         <div class="threads-compose-modal">
             <!-- Header bar -->
             <div class="threads-compose-header">
-                <button type="button" class="threads-compose-cancel-btn" onclick="closeCreateThreadModal()">Batal</button>
+                <button type="button" class="threads-compose-cancel-btn" onclick="closeCreateThreadModal()">
+                    <i class="fa-solid fa-xmark" style="font-size: 1.15rem;"></i>
+                </button>
                 <span class="threads-compose-title">Knot baru</span>
-                <div style="width: 45px;"></div>
+                <button type="button" class="threads-compose-submit-btn" onclick="document.getElementById('composeThreadForm').requestSubmit()">
+                    Posting
+                </button>
             </div>
 
-            <form onsubmit="handleCreateThreadSubmit(event)" style="display: flex; flex-direction: column; flex: 1;">
+            <form id="composeThreadForm" onsubmit="handleCreateThreadSubmit(event)" style="display: flex; flex-direction: column; flex: 1; min-height: 0;">
                 <!-- Main Body: Avatar + Content Area -->
                 <div class="threads-compose-body">
                     <div id="createThreadUserAvatar" class="threads-compose-avatar">
@@ -655,7 +659,7 @@
                     </div>
                     <div class="threads-compose-main">
                         <div class="threads-compose-username" id="createThreadUsername">Anda</div>
-                        <div style="position: relative; width: 100%;">
+                        <div style="position: relative; width: 100%; flex: 1; display: flex; flex-direction: column;">
                             <textarea id="createThreadInputContent" class="threads-compose-textarea" rows="3" maxlength="1000" placeholder="Ada apa baru?" required oninput="updateThreadCharCounter(this.value)"></textarea>
                             
                             <!-- Mention Autocomplete Dropdown -->
@@ -664,7 +668,7 @@
                     </div>
                 </div>
 
-                <!-- Footer: Attachment / Location & Submit Button -->
+                <!-- Footer: Attachment / Location & Counter -->
                 <div class="threads-compose-footer">
                     <div class="threads-compose-meta">
                         <span id="createThreadLocationBadge" class="threads-compose-loc" title="Jarak relatif Anda">
@@ -672,9 +676,6 @@
                         </span>
                         <span id="createThreadCharCounter" class="threads-compose-counter">0/1000</span>
                     </div>
-                    <button type="submit" class="threads-compose-submit-btn" id="btnSubmitNewThread">
-                        Posting
-                    </button>
                 </div>
             </form>
         </div>
