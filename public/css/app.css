@@ -699,6 +699,19 @@
             border-radius: 12px;
         }
 
+        .btn-pill {
+            border-radius: 9999px;
+            padding: 0.5rem 1.25rem;
+        }
+
+        .btn-pill.btn-sm {
+            padding: 0.38rem 0.95rem;
+        }
+
+        .btn-pill.btn-lg {
+            padding: 0.65rem 1.5rem;
+        }
+
         /* Tombol Ikon Bundar Seragam (.btn-icon) */
         .btn-icon,
         .header-icon-btn,
@@ -2521,13 +2534,15 @@
             position: absolute;
             left: 0;
             right: 0;
-            max-height: 220px;
+            top: 100%;
+            margin-top: 4px;
+            max-height: 200px;
             background: #ffffff;
             border: 1px solid var(--border-color);
             border-radius: 12px;
             box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.15), 0 8px 10px -6px rgba(15, 23, 42, 0.1);
             overflow-y: auto;
-            z-index: 1000;
+            z-index: 9999;
             padding: 0.35rem;
         }
 
@@ -2768,7 +2783,7 @@
             border-radius: 20px;
             box-shadow: 0 25px 60px rgba(15, 23, 42, 0.18);
             border: 1px solid var(--border-color);
-            overflow: hidden;
+            overflow: visible;
             display: flex;
             flex-direction: column;
             animation: popModalCard 0.25s cubic-bezier(0.16, 1, 0.3, 1);
