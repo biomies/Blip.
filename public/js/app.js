@@ -726,13 +726,18 @@
                 navigator.geolocation.getCurrentPosition(async (pos) => {
                     await syncCoordinates(pos.coords.latitude, pos.coords.longitude);
                 }, async (err) => {
+                    console.warn('[Geolocation] Browser GPS error/timeout:', err.message);
                     // Fallback jika ditolak/timeout/lokal: gunakan koordinat default Jakarta Selatan (-6.2538, 106.8206)
                     if (!currentUser.latitude || !currentUser.longitude) {
                         await syncCoordinates(-6.2538, 106.8206);
                     } else {
                         loadNearbyUsers();
                     }
-                }, { timeout: 3500 });
+                }, { 
+                    enableHighAccuracy: true,
+                    maximumAge: 0,
+                    timeout: 10000 
+                });
             } else {
                 if (!currentUser.latitude || !currentUser.longitude) {
                     syncCoordinates(-6.2538, 106.8206);
@@ -1313,7 +1318,11 @@
                     await finishRefresh();
                 }, async () => {
                     await finishRefresh();
-                }, { timeout: 4000 });
+                }, { 
+                    enableHighAccuracy: true,
+                    maximumAge: 0,
+                    timeout: 10000 
+                });
             } else {
                 await finishRefresh();
             }
