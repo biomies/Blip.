@@ -9,11 +9,11 @@ Route::get('/', [BlipController::class, 'index'])->name('home');
 Route::prefix('api/blip')->group(function () {
     Route::get('/init', [BlipController::class, 'initUser']);
     Route::get('/check-username', [BlipController::class, 'checkUsernameAvailability']);
+    Route::get('/users/mention-suggestions', [KnotController::class, 'getMentionSuggestions']);
     Route::get('/users/search', [BlipController::class, 'searchUsersForFriend']);
     Route::get('/users/by-username/{username}', [BlipController::class, 'getUserProfileByUsername']);
     Route::get('/users/{id}', [BlipController::class, 'getUserProfileById']);
     Route::get('/users/{id}/threads', [KnotController::class, 'getUserThreads']);
-    Route::get('/users/mention-suggestions', [KnotController::class, 'getMentionSuggestions']);
     Route::post('/profile', [BlipController::class, 'updateProfile']);
     Route::post('/profile/avatar', [BlipController::class, 'updateAvatar']);
     Route::delete('/profile/avatar', [BlipController::class, 'removeAvatar']);
