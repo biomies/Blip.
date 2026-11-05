@@ -408,9 +408,10 @@ class BlipController extends Controller
         $page = max(1, (int) $request->query('page', 1));
         $limit = min(50, max(5, (int) $request->query('limit', 15))); // default 15 per page
 
-        // Cari user yang aktif dalam 24 jam terakhir dan bukan diri sendiri
+        // Cari user yang sudah onboarded, aktif dalam 24 jam terakhir, dan bukan diri sendiri
         $activeCutoff = Carbon::now()->subHours(24);
         $query = BlipUser::where('id', '!=', $currentUser->id)
+            ->where('is_onboarded', true)
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
             ->where('last_active_at', '>=', $activeCutoff);
