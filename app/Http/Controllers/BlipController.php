@@ -1234,46 +1234,6 @@ class BlipController extends Controller
         imagedestroy($resized);
     }
 
-    public function seedNearbyDemoUsers(Request $request)
-    {
-        $currentUser = $this->resolveUser($request);
-        $baseLat = $currentUser->latitude ?? -6.2538;
-        $baseLon = $currentUser->longitude ?? 106.8206;
-
-        $demoProfiles = [
-            ['name' => 'Dimas Mampang', 'username' => 'dimas_mampang', 'color' => '#10b981', 'loc' => 'Mampang Prapatan IV', 'dlat' => 0.003, 'dlon' => 0.002],
-            ['name' => 'Rina Kemang', 'username' => 'rina_kemang', 'color' => '#f43f5e', 'loc' => 'Jl. Bangka Raya', 'dlat' => -0.005, 'dlon' => 0.004],
-            ['name' => 'Budi Duren Tiga', 'username' => 'budi_duren3', 'color' => '#06b6d4', 'loc' => 'Duren Tiga Selatan', 'dlat' => 0.007, 'dlon' => -0.003],
-            ['name' => 'Siti Tendean', 'username' => 'siti_tendean', 'color' => '#f59e0b', 'loc' => 'Jl. Kapten Tendean', 'dlat' => -0.008, 'dlon' => -0.004],
-        ];
-
-        foreach ($demoProfiles as $p) {
-            $demoUser = BlipUser::firstOrCreate(
-                ['name' => $p['name']],
-                [
-                    'username' => $p['username'],
-                    'session_token' => (string) Str::uuid(),
-                    'avatar_color' => $p['color'],
-                    'latitude' => $baseLat + $p['dlat'],
-                    'longitude' => $baseLon + $p['dlon'],
-                    'location_name' => $p['loc'],
-                    'last_active_at' => Carbon::now(),
-                ]
-            );
-            $demoUser->update([
-                'username' => $demoUser->username ?: $p['username'],
-                'latitude' => $baseLat + $p['dlat'],
-                'longitude' => $baseLon + $p['dlon'],
-                'last_active_at' => Carbon::now(),
-            ]);
-        }
-
-        return response()->json([
-            'status' => 'success',
-            'message' => 'User simulasi sekitar Mampang berhasil diaktifkan untuk demo!',
-        ]);
-    }
-
     /**
      * Format jarak numerik (km) menjadi string ringkas (misal: 150 m atau 2.4 km)
      */

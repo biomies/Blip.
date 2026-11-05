@@ -32,7 +32,6 @@ Route::prefix('api/blip')->group(function () {
     Route::delete('/messages/{messageId}', [BlipController::class, 'deleteSingleMessage']);
     Route::post('/messages/bulk-delete', [BlipController::class, 'bulkDeleteMessages']);
     Route::delete('/messages/clear/{friendId}', [BlipController::class, 'clearChat']);
-    Route::post('/seed-demo', [BlipController::class, 'seedNearbyDemoUsers']);
 
     // Knot / Threads (Publik / Utas Terbuka dengan Jarak)
     Route::get('/threads', [KnotController::class, 'getThreads']);
