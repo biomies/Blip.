@@ -1201,11 +1201,23 @@
         // Tab Navigation & Toggle Sidebar Kedua (Window ke-2)
         function switchTab(tab) {
             const sidebar = document.getElementById('chatsSidebar');
+            const isMobile = window.innerWidth <= 768;
 
-            // Jika tab yang sama ditekan kembali, toggle tutup/buka window ke-2
+            // Jika di PC/Desktop dan tab yang sama ditekan kembali, toggle tutup/buka window ke-2
+            // Di HP/Android, tab TIDAK BOLEH di-collapse/disembunyikan saat ditekan ulang
             if (currentTab === tab && sidebar) {
-                const isCurrentlyCollapsed = sidebar.classList.contains('collapsed');
-                sidebar.classList.toggle('collapsed', !isCurrentlyCollapsed);
+                if (!isMobile) {
+                    const isCurrentlyCollapsed = sidebar.classList.contains('collapsed');
+                    sidebar.classList.toggle('collapsed', !isCurrentlyCollapsed);
+                } else {
+                    // Di mobile, jika sedang membuka chat/thread lalu tekan tab yang sama, kembali ke daftar list
+                    sidebar.classList.remove('collapsed');
+                    if (document.body.classList.contains('in-chat-mobile')) {
+                        closeChat();
+                    } else if (document.body.classList.contains('in-thread-mobile')) {
+                        closeThreadView();
+                    }
+                }
                 return;
             }
 
