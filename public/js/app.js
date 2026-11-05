@@ -1274,9 +1274,23 @@
             // Tutup inline profile jika kembali ke nearby / contacts / friends / threads
             const chatsContent = document.getElementById('chatsSidebarContent');
             const profileView = document.getElementById('inlineProfileView');
+            const listEl = document.getElementById('listContent');
+
+            // Trigger efek fade transisi tab yang halus
+            if (listEl) {
+                listEl.classList.remove('tab-fade-in');
+                void listEl.offsetWidth; // Force reflow
+                listEl.classList.add('tab-fade-in');
+            }
+
             if (tab === 'profile') {
                 if (chatsContent) chatsContent.style.display = 'none';
-                if (profileView) profileView.style.display = 'flex';
+                if (profileView) {
+                    profileView.style.display = 'flex';
+                    profileView.classList.remove('tab-fade-in');
+                    void profileView.offsetWidth;
+                    profileView.classList.add('tab-fade-in');
+                }
                 return;
             } else {
                 if (chatsContent) chatsContent.style.display = 'flex';
@@ -2974,7 +2988,7 @@
                         <i class="fa-regular fa-paper-plane"></i>
                         <span style="font-weight: 700; font-size: 0.95rem; color: var(--text-main);">Belum ada Knot</span>
                         <p style="font-size: 0.82rem; margin: 0; line-height: 1.4;">Ketika Anda memposting Knot, postingan tersebut akan muncul di sini.</p>
-                        <button type="button" class="twitter-btn-edit-profile" style="background: var(--primary); color: #ffffff; border-color: var(--primary); margin-top: 0.5rem;" onclick="openCreateThreadModal()">
+                        <button type="button" class="btn btn-primary btn-pill btn-sm" style="margin-top: 0.65rem;" onclick="openCreateThreadModal()">
                             <i class="fa-solid fa-plus"></i> Buat Knot Baru
                         </button>
                     </div>

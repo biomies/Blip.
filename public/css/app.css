@@ -791,6 +791,22 @@
             border-color: rgba(239, 68, 68, 0.2);
         }
 
+        /* Smooth Tab Transition Effect */
+        .tab-fade-in {
+            animation: tabFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        @keyframes tabFadeIn {
+            0% {
+                opacity: 0;
+                transform: translateY(6px);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
         /* 3. Third Column: Main Chat Box */
         .chat-panel {
             flex: 1;
