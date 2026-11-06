@@ -605,17 +605,24 @@
 
                 function handleThreadNotification(data) {
                     console.log('[WebSocket] thread.notification event received:', data);
-                    if (data.type === 'thread_reply') {
-                        showToast(`${data.sender?.name || 'Seseorang'} membalas utas Anda: "${data.previewText || ''}"`, 'info');
-                    } else if (data.type === 'thread_mention') {
-                        showToast(`${data.sender?.name || 'Seseorang'} menyebut Anda dalam postingan: "${data.previewText || ''}"`, 'info');
-                    } else if (data.type === 'thread_like') {
-                        const count = data.groupedCount || 1;
-                        if (count > 1) {
-                            showToast(`${data.sender?.name || 'Seseorang'} dan ${count - 1} orang lainnya menyukai postingan Anda.`, 'info');
-                        } else {
-                            showToast(`${data.sender?.name || 'Seseorang'} menyukai postingan Anda.`, 'info');
+                    
+                    if (data.type === 'thread_unlike') {
+                        // User membatalkan like: perbarui notifikasi secara live tanpa toast
+                        fetchThreadNotifications();
+                        if (activeThreadId && data.threadId && activeThreadId == data.threadId) {
+                            openThreadView(activeThreadId);
+                        } else if (currentTab === 'threads') {
+                            loadThreads();
                         }
+                        return;
+                    }
+
+                    if (data.type === 'thread_reply') {
+                        showToast(`💬 ${data.sender?.name || 'Seseorang'} membalas knot Anda: "${data.previewText || ''}"`, 'info');
+                    } else if (data.type === 'thread_mention') {
+                        showToast(`🏷️ ${data.sender?.name || 'Seseorang'} menyebut Anda dalam knot: "${data.previewText || ''}"`, 'info');
+                    } else if (data.type === 'thread_like') {
+                        showToast(`❤️ ${data.sender?.name || 'Seseorang'} menyukai knot Anda: "${data.previewText || ''}"`, 'info');
                     }
 
                     // Tambah badge unread thread notif
@@ -4007,6 +4014,7 @@
 
             container.innerHTML = cachedThreadNotifs.map(n => {
                 const s = n.sender || {};
+                const s2 = n.second_sender || null;
                 const isReply = n.type === 'thread_reply';
                 const isLike = n.type === 'thread_like';
                 const likeCount = n.like_count || 1;
@@ -4016,32 +4024,52 @@
                 let iconColor = '';
 
                 if (isLike) {
-                    if (likeCount > 1) {
-                        actionText = `dan ${likeCount - 1} orang lainnya menyukai knot Anda`;
+                    if (likeCount === 1) {
+                        actionText = `<b>${escapeHtml(s.name || 'Pengguna')}</b> menyukai knot Anda`;
+                    } else if (likeCount === 2 && s2) {
+                        actionText = `<b>${escapeHtml(s.name || 'Pengguna')}</b> dan <b>${escapeHtml(s2.name || 'Pengguna')}</b> menyukai knot Anda`;
+                    } else if (likeCount > 2 && s2) {
+                        const othersCount = likeCount - 2;
+                        actionText = `<b>${escapeHtml(s.name || 'Pengguna')}</b>, <b>${escapeHtml(s2.name || 'Pengguna')}</b>, dan <b>${othersCount} orang lainnya</b> menyukai knot Anda`;
                     } else {
-                        actionText = 'menyukai knot Anda';
+                        const othersCount = likeCount - 1;
+                        actionText = `<b>${escapeHtml(s.name || 'Pengguna')}</b> dan <b>${othersCount} orang lainnya</b> menyukai knot Anda`;
                     }
                     iconClass = 'fa-heart';
                     iconColor = '#ef4444';
                 } else if (isReply) {
-                    actionText = 'membalas knot Anda';
+                    actionText = `<b>${escapeHtml(s.name || 'Pengguna')}</b> membalas knot Anda`;
                     iconClass = 'fa-reply';
                     iconColor = 'var(--primary)';
                 } else {
-                    actionText = 'menyebut Anda dalam knot';
+                    actionText = `<b>${escapeHtml(s.name || 'Pengguna')}</b> menyebut Anda dalam knot`;
                     iconClass = 'fa-at';
                     iconColor = '#8b5cf6';
                 }
 
                 const notifIdsJson = JSON.stringify(n.ids || [n.id]);
 
+                // Render avatar tunggal atau bertumpuk ala Instagram
+                let avatarHtml = renderAvatarHtml(s.name || 'User', s.avatar_color, s.avatar_url, '', 'width: 38px; height: 38px; font-size: 0.88rem; flex-shrink: 0;');
+                if (isLike && likeCount >= 2 && s2) {
+                    avatarHtml = `
+                        <div class="stacked-notif-avatars" style="position: relative; width: 44px; height: 38px; flex-shrink: 0;">
+                            <div style="position: absolute; left: 0; top: 0; z-index: 2;">
+                                ${renderAvatarHtml(s.name || 'User', s.avatar_color, s.avatar_url, '', 'width: 28px; height: 28px; font-size: 0.7rem; border: 2px solid #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.1);')}
+                            </div>
+                            <div style="position: absolute; right: 0; bottom: 0; z-index: 1;">
+                                ${renderAvatarHtml(s2.name || 'User', s2.avatar_color, s2.avatar_url, '', 'width: 26px; height: 26px; font-size: 0.65rem; border: 2px solid #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.1);')}
+                            </div>
+                        </div>
+                    `;
+                }
+
                 return `
                     <div class="thread-notif-item ${!n.is_read ? 'unread' : ''}" onclick='onThreadNotificationClick(${notifIdsJson}, ${n.thread_id})'>
-                        ${renderAvatarHtml(s.name || 'User', s.avatar_color, s.avatar_url, '', 'width: 34px; height: 34px; font-size: 0.85rem; flex-shrink: 0;')}
+                        ${avatarHtml}
                         <div class="thread-notif-content">
-                            <div class="thread-notif-title">
-                                <span>${escapeHtml(s.name || 'Pengguna')}</span>
-                                <span style="font-weight: 500; color: var(--text-muted); font-size: 0.78rem;"> ${actionText}</span>
+                            <div class="thread-notif-title" style="line-height: 1.35;">
+                                <span style="font-size: 0.85rem; color: var(--text-main); font-weight: 500;">${actionText}</span>
                             </div>
                             <div class="thread-notif-preview">
                                 <i class="fa-solid ${iconClass}" style="color: ${iconColor}; font-size: 0.72rem; margin-right: 3px;"></i>

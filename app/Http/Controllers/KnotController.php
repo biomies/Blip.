@@ -527,6 +527,20 @@ class KnotController extends BaseBlipController
                 ->where('type', 'thread_like')
                 ->where('is_read', false)
                 ->delete();
+
+            // Broadcast event un-like agar UI penerima langsung ter-update live tanpa reload
+            if ($thread->user_id !== $currentUser->id) {
+                try {
+                    broadcast(new ThreadNotification(
+                        $thread->user_id,
+                        'thread_unlike',
+                        $thread->id,
+                        null,
+                        Str::limit($thread->content, 80),
+                        $currentUser
+                    ));
+                } catch (\Throwable $e) {}
+            }
         } else {
             BlipThreadLike::firstOrCreate([
                 'thread_id' => $thread->id,
@@ -828,11 +842,11 @@ class KnotController extends BaseBlipController
                     $unreadLikesGrouped[$tId] = [
                         'first_notif' => $n,
                         'notif_ids' => [$n->id],
-                        'unique_sender_ids' => [$n->sender_id => true],
+                        'senders_map' => [$n->sender_id => $n->sender],
                     ];
                 } else {
                     $unreadLikesGrouped[$tId]['notif_ids'][] = $n->id;
-                    $unreadLikesGrouped[$tId]['unique_sender_ids'][$n->sender_id] = true;
+                    $unreadLikesGrouped[$tId]['senders_map'][$n->sender_id] = $n->sender;
                 }
             } else {
                 $groupedData[] = [
@@ -844,6 +858,7 @@ class KnotController extends BaseBlipController
                     'preview_text' => $n->preview_text,
                     'is_read' => $n->is_read,
                     'like_count' => 1,
+                    'other_senders' => [],
                     'created_at_human' => $n->created_at ? $n->created_at->diffForHumans() : 'Baru saja',
                     'sender' => [
                         'id' => $n->sender?->id,
@@ -858,9 +873,10 @@ class KnotController extends BaseBlipController
 
         foreach ($unreadLikesGrouped as $tId => $group) {
             $first = $group['first_notif'];
-            // Hitung jumlah orang yang UNIK (bukan jumlah baris spam)
-            $count = count($group['unique_sender_ids']);
-            $latestSender = $first->sender;
+            $uniqueSenders = array_values($group['senders_map']);
+            $count = count($uniqueSenders);
+            $latestSender = $uniqueSenders[0] ?? $first->sender;
+            $secondSender = $uniqueSenders[1] ?? null;
 
             $groupedData[] = [
                 'id' => $first->id,
@@ -871,6 +887,23 @@ class KnotController extends BaseBlipController
                 'preview_text' => $first->preview_text,
                 'is_read' => false,
                 'like_count' => $count,
+                'second_sender' => $secondSender ? [
+                    'id' => $secondSender->id,
+                    'name' => $secondSender->name,
+                    'username' => $secondSender->username,
+                    'avatar_color' => $secondSender->avatar_color ?? '#06b6d4',
+                    'avatar_url' => $secondSender->avatar_url,
+                ] : null,
+                'created_at_human' => $first->created_at ? $first->created_at->diffForHumans() : 'Baru saja',
+                'sender' => [
+                    'id' => $latestSender?->id,
+                    'name' => $latestSender?->name ?? 'Pengguna',
+                    'username' => $latestSender?->username,
+                    'avatar_color' => $latestSender?->avatar_color ?? '#4f46e5',
+                    'avatar_url' => $latestSender?->avatar_url,
+                ],
+            ];
+        }
                 'created_at_human' => $first->created_at ? $first->created_at->diffForHumans() : 'Baru saja',
                 'sender' => [
                     'id' => $latestSender?->id,
