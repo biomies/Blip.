@@ -609,35 +609,52 @@
                     if (data.type === 'thread_unlike') {
                         // User membatalkan like: perbarui notifikasi secara live tanpa toast
                         fetchThreadNotifications();
-                        if (activeThreadId && data.threadId && activeThreadId == data.threadId) {
-                            openThreadView(activeThreadId);
-                        } else if (currentTab === 'threads') {
-                            loadThreads();
-                        }
+                        // Update angka like di card secara spesifik tanpa me-reload list sidebar!
+                        updateSpecificThreadLikeCount(data.threadId, -1);
                         return;
                     }
 
                     if (data.type === 'thread_reply') {
                         showToast(`💬 ${data.sender?.name || 'Seseorang'} membalas knot Anda: "${data.previewText || ''}"`, 'info');
+                        // Update angka balasan di card secara spesifik tanpa reload
+                        updateSpecificThreadReplyCount(data.threadId, 1);
                     } else if (data.type === 'thread_mention') {
                         showToast(`🏷️ ${data.sender?.name || 'Seseorang'} menyebut Anda dalam knot: "${data.previewText || ''}"`, 'info');
                     } else if (data.type === 'thread_like') {
                         showToast(`❤️ ${data.sender?.name || 'Seseorang'} menyukai knot Anda: "${data.previewText || ''}"`, 'info');
+                        // Update angka like di card secara spesifik tanpa me-reload list sidebar!
+                        updateSpecificThreadLikeCount(data.threadId, 1);
                     }
 
                     // Tambah badge unread thread notif
                     unreadThreadNotifsCount++;
                     updateThreadNotificationBadge();
 
-                    // Perbarui notifikasi list di dropdown jika sedang dibuka atau untuk pembaruan berikutnya
+                    // Perbarui notifikasi list di dropdown secara live
                     fetchThreadNotifications();
+                }
 
-                    // Jika user sedang membuka thread yang sama, perbarui detail thread
-                    if (activeThreadId && data.threadId && activeThreadId == data.threadId) {
-                        openThreadView(activeThreadId);
-                    } else if (currentTab === 'threads') {
-                        loadThreads();
-                    }
+                // Helper untuk memperbarui angka like postingan secara halus di DOM tanpa reload sidebar
+                function updateSpecificThreadLikeCount(threadId, change) {
+                    if (!threadId) return;
+                    const countEls = document.querySelectorAll(`[data-thread-like-count="${threadId}"]`);
+                    countEls.forEach(el => {
+                        const current = parseInt(el.innerText, 10) || 0;
+                        const nextVal = Math.max(0, current + change);
+                        el.innerText = nextVal;
+                        el.title = nextVal > 0 ? 'Lihat siapa yang menyukai' : 'Suka';
+                        el.onclick = nextVal > 0 ? (e) => { e.stopPropagation(); openThreadLikesModal(threadId); } : null;
+                    });
+                }
+
+                // Helper untuk memperbarui angka reply postingan secara halus di DOM tanpa reload sidebar
+                function updateSpecificThreadReplyCount(threadId, change) {
+                    if (!threadId) return;
+                    const countEls = document.querySelectorAll(`[data-thread-reply-count="${threadId}"]`);
+                    countEls.forEach(el => {
+                        const current = parseInt(el.innerText, 10) || 0;
+                        el.innerText = Math.max(0, current + change);
+                    });
                 }
 
                 // Listen notifikasi thread & mention
