@@ -5186,10 +5186,17 @@
             }
         });
 
-        window.addEventListener('DOMContentLoaded', () => {
+        // Inisialisasi awal saat script dimuat atau DOM ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', bootstrapApp);
+        } else {
+            bootstrapApp();
+        }
+
+        function bootstrapApp() {
             initApp();
             setupScrollListeners();
             setupMentionAutocomplete('createThreadInputContent', 'createThreadMentionDropdown');
             setupMentionAutocomplete('threadReplyInput', 'threadReplyMentionDropdown');
             fetchThreadNotifications();
-        });
+        }
