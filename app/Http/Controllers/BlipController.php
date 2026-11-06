@@ -378,8 +378,8 @@ class BlipController extends Controller
         $user = $this->resolveUser($request);
 
         $request->validate([
-            'latitude' => 'required|numeric',
-            'longitude' => 'required|numeric',
+            'latitude' => 'nullable|numeric',
+            'longitude' => 'nullable|numeric',
             'location_name' => 'nullable|string|max:100',
         ]);
 

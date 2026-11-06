@@ -727,8 +727,8 @@
                     await syncCoordinates(pos.coords.latitude, pos.coords.longitude);
                 }, async (err) => {
                     console.warn('[Geolocation] Browser GPS ditolak/error:', err.message);
-                    // Jangan setel koordinat palsu/default jika user menolak.
-                    // Tetap muat tab sesuai state saat ini.
+                    // Jika GPS ditolak atau dimatikan oleh user, sinkronkan lokasi menjadi null
+                    await clearCoordinatesOnServer();
                     if (currentTab === 'nearby') {
                         renderNoLocationState();
                     } else if (currentTab === 'friends') {
@@ -740,6 +740,7 @@
                     timeout: 10000 
                 });
             } else {
+                clearCoordinatesOnServer();
                 if (currentTab === 'nearby') {
                     renderNoLocationState();
                 } else if (currentTab === 'friends') {
@@ -797,6 +798,25 @@
                 maximumAge: 0,
                 timeout: 10000
             });
+        }
+
+        // Hapus koordinat di server ketika GPS dimatikan / tidak aktif
+        async function clearCoordinatesOnServer() {
+            try {
+                if (currentUser.latitude || currentUser.longitude) {
+                    const res = await fetch('/api/blip/location', {
+                        method: 'POST',
+                        headers: getHeaders(),
+                        body: JSON.stringify({ latitude: null, longitude: null })
+                    });
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        currentUser = data.user;
+                    }
+                }
+            } catch (err) {
+                console.warn('[Location] Gagal mengosongkan lokasi:', err);
+            }
         }
 
         async function syncCoordinates(lat, lon) {
