@@ -4237,7 +4237,13 @@
                     closeCreateThreadModal();
                     threadsList.unshift(data.thread);
                     filterAndRenderThreads();
-                    openThreadView(data.thread.id);
+
+                    // Jika sedang berada di tab profil, perbarui daftar knot profil seketika
+                    if (currentTab === 'profile') {
+                        loadMyProfileKnots();
+                    } else {
+                        openThreadView(data.thread.id);
+                    }
                 } else {
                     alert(data.message || 'Gagal memposting knot.');
                 }
@@ -5051,6 +5057,12 @@
                         if (data.status === 'success') {
                             threadsList = threadsList.filter(t => parseInt(t.id, 10) !== parseInt(threadId, 10));
                             filterAndRenderThreads();
+
+                            // Jika sedang berada di tab profil, perbarui daftar knot profil seketika
+                            if (currentTab === 'profile') {
+                                loadMyProfileKnots();
+                            }
+
                             if (activeThreadId && parseInt(activeThreadId, 10) === parseInt(threadId, 10)) {
                                 closeThreadView();
                             }
