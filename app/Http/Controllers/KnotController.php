@@ -904,16 +904,6 @@ class KnotController extends BaseBlipController
                 ],
             ];
         }
-                'created_at_human' => $first->created_at ? $first->created_at->diffForHumans() : 'Baru saja',
-                'sender' => [
-                    'id' => $latestSender?->id,
-                    'name' => $latestSender?->name ?? 'Pengguna',
-                    'username' => $latestSender?->username,
-                    'avatar_color' => $latestSender?->avatar_color ?? '#4f46e5',
-                    'avatar_url' => $latestSender?->avatar_url,
-                ],
-            ];
-        }
 
         usort($groupedData, fn($a, $b) => $b['id'] <=> $a['id']);
 
