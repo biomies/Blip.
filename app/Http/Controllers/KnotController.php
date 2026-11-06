@@ -519,6 +519,14 @@ class KnotController extends BaseBlipController
         if ($existing) {
             $existing->delete();
             $isLiked = false;
+
+            // Jika dibatalkan (unlike), hapus notifikasi like yang belum dibaca dari user ini
+            BlipNotification::where('user_id', $thread->user_id)
+                ->where('sender_id', $currentUser->id)
+                ->where('thread_id', $thread->id)
+                ->where('type', 'thread_like')
+                ->where('is_read', false)
+                ->delete();
         } else {
             BlipThreadLike::firstOrCreate([
                 'thread_id' => $thread->id,
@@ -528,26 +536,36 @@ class KnotController extends BaseBlipController
 
             // Buat notifikasi jika yang menyukai bukan pembuat postingan
             if ($thread->user_id !== $currentUser->id) {
-                BlipNotification::createWithCap([
-                    'user_id' => $thread->user_id,
-                    'sender_id' => $currentUser->id,
-                    'type' => 'thread_like',
-                    'thread_id' => $thread->id,
-                    'reply_id' => null,
-                    'preview_text' => Str::limit($thread->content, 80),
-                    'is_read' => false,
-                ]);
+                // Pastikan tidak ada duplikasi notifikasi like yang belum dibaca dari user yang sama
+                $alreadyNotified = BlipNotification::where('user_id', $thread->user_id)
+                    ->where('sender_id', $currentUser->id)
+                    ->where('thread_id', $thread->id)
+                    ->where('type', 'thread_like')
+                    ->where('is_read', false)
+                    ->exists();
 
-                try {
-                    broadcast(new ThreadNotification(
-                        $thread->user_id,
-                        'thread_like',
-                        $thread->id,
-                        null,
-                        Str::limit($thread->content, 80),
-                        $currentUser
-                    ));
-                } catch (\Throwable $e) {}
+                if (!$alreadyNotified) {
+                    BlipNotification::createWithCap([
+                        'user_id' => $thread->user_id,
+                        'sender_id' => $currentUser->id,
+                        'type' => 'thread_like',
+                        'thread_id' => $thread->id,
+                        'reply_id' => null,
+                        'preview_text' => Str::limit($thread->content, 80),
+                        'is_read' => false,
+                    ]);
+
+                    try {
+                        broadcast(new ThreadNotification(
+                            $thread->user_id,
+                            'thread_like',
+                            $thread->id,
+                            null,
+                            Str::limit($thread->content, 80),
+                            $currentUser
+                        ));
+                    } catch (\Throwable $e) {}
+                }
             }
         }
 
@@ -810,13 +828,11 @@ class KnotController extends BaseBlipController
                     $unreadLikesGrouped[$tId] = [
                         'first_notif' => $n,
                         'notif_ids' => [$n->id],
-                        'senders' => [$n->sender],
-                        'count' => 1,
+                        'unique_sender_ids' => [$n->sender_id => true],
                     ];
                 } else {
                     $unreadLikesGrouped[$tId]['notif_ids'][] = $n->id;
-                    $unreadLikesGrouped[$tId]['senders'][] = $n->sender;
-                    $unreadLikesGrouped[$tId]['count']++;
+                    $unreadLikesGrouped[$tId]['unique_sender_ids'][$n->sender_id] = true;
                 }
             } else {
                 $groupedData[] = [
@@ -842,7 +858,8 @@ class KnotController extends BaseBlipController
 
         foreach ($unreadLikesGrouped as $tId => $group) {
             $first = $group['first_notif'];
-            $count = $group['count'];
+            // Hitung jumlah orang yang UNIK (bukan jumlah baris spam)
+            $count = count($group['unique_sender_ids']);
             $latestSender = $first->sender;
 
             $groupedData[] = [
