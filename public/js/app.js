@@ -748,7 +748,7 @@
             }
         }
 
-        // Tampilan ramah ketika user belum mengizinkan / menyalakan GPS
+        // Tampilan ramah dan jelas ketika user belum mengizinkan / mematikan GPS
         function renderNoLocationState() {
             const container = document.getElementById('listContent');
             if (!container) return;
@@ -756,16 +756,23 @@
             if (storiesSection) storiesSection.style.display = 'none';
 
             container.innerHTML = `
-                <div style="text-align:center; padding: 3.5rem 1.5rem; color: var(--text-muted);">
-                    <div style="width: 72px; height: 72px; background: rgba(43, 119, 248, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem;">
-                        <i class="fa-solid fa-location-dot" style="font-size: 2.2rem; color: var(--primary);"></i>
+                <div style="text-align:center; padding: 3rem 1.5rem; color: var(--text-muted); max-width: 380px; margin: 0 auto;">
+                    <div style="width: 80px; height: 80px; background: rgba(43, 119, 248, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem;">
+                        <i class="fa-solid fa-location-dot" style="font-size: 2.4rem; color: var(--primary);"></i>
                     </div>
-                    <h3 style="color:var(--text-main); font-weight: 800; font-size: 1.15rem; margin-bottom: 0.5rem;">Aktifkan Akses Lokasi</h3>
-                    <p style="font-size: 0.88rem; line-height: 1.5; max-width: 290px; margin: 0 auto 1.5rem;">
-                        Blip membutuhkan izin lokasi GPS Anda untuk menemukan orang-orang dan cerita seru di sekitar Anda.
+                    <h3 style="color:var(--text-main); font-weight: 800; font-size: 1.25rem; margin-bottom: 0.5rem;">GPS Anda Sedang Nonaktif</h3>
+                    <p style="font-size: 0.9rem; line-height: 1.55; color: var(--text-muted); margin-bottom: 1.5rem;">
+                        Blip menghubungkanmu dengan orang-orang nyata di sekitarmu. Nyalakan GPS HP Anda dan berikan izin lokasi agar radar bisa menemukan teman terdekat!
                     </p>
-                    <button type="button" class="btn btn-primary" onclick="requestGpsPermissionManually()" style="padding: 0.65rem 1.5rem; border-radius: 9999px; font-weight: 700; font-size: 0.9rem; display: inline-flex; align-items: center; gap: 0.5rem; box-shadow: 0 4px 12px rgba(43, 119, 248, 0.25);">
-                        <i class="fa-solid fa-crosshairs"></i> Izinkan Lokasi Saya
+                    <div style="background: var(--bg-hover, #f8fafc); border: 1px dashed var(--border-color, #e2e8f0); border-radius: 12px; padding: 0.85rem 1rem; margin-bottom: 1.5rem; text-align: left; font-size: 0.82rem; color: var(--text-main);">
+                        <div style="font-weight: 700; margin-bottom: 0.35rem; color: var(--primary);"><i class="fa-solid fa-circle-info"></i> Cara Menyalakan:</div>
+                        <ol style="margin: 0; padding-left: 1.2rem; line-height: 1.45; color: var(--text-muted);">
+                            <li>Tarik status bar HP & pastikan <b>Lokasi / GPS Aktif</b>.</li>
+                            <li>Klik tombol biru di bawah lalu pilih <b>"Izinkan"</b>.</li>
+                        </ol>
+                    </div>
+                    <button type="button" class="btn btn-primary" onclick="requestGpsPermissionManually()" style="width: 100%; padding: 0.8rem 1.5rem; border-radius: 9999px; font-weight: 700; font-size: 0.95rem; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; box-shadow: 0 4px 14px rgba(43, 119, 248, 0.28);">
+                        <i class="fa-solid fa-crosshairs"></i> Nyalakan Lokasi & Refresh Radar
                     </button>
                 </div>
             `;
