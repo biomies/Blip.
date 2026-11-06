@@ -4760,7 +4760,8 @@
             }
         }
 
-        const pendingLikesSet = new Set();
+        const likeDebounceTimers = new Map(); // threadId => setTimeout timer
+        const initialLikeStates = new Map(); // threadId => { initialLiked, initialCount }
 
         function syncLikeUI(threadId, isLiked, count) {
             const numId = parseInt(threadId, 10);
@@ -4824,11 +4825,7 @@
             const numId = parseInt(threadId, 10);
             if (!numId) return;
 
-            // Mencegah spam klik berulang saat request masih terbang di background
-            if (pendingLikesSet.has(numId)) return;
-            pendingLikesSet.add(numId);
-
-            // Deteksi status saat ini dari tombol atau memori
+            // 1. Deteksi status saat ini dari tombol atau memori
             let currentLiked = false;
             let currentCount = 0;
 
@@ -4852,33 +4849,62 @@
                 if (found) currentCount = found.likes_count || 0;
             }
 
-            // OPTIMISTIC UPDATE: Ubah warna dan angka seketika tanpa delay jaringan!
-            const optimisticLiked = !currentLiked;
-            const optimisticCount = optimisticLiked ? currentCount + 1 : Math.max(0, currentCount - 1);
-            syncLikeUI(numId, optimisticLiked, optimisticCount);
-
-            try {
-                const res = await fetch(`/api/blip/threads/${numId}/like`, {
-                    method: 'POST',
-                    headers: getHeaders(),
-                });
-                const data = await res.json();
-                console.log('[Like] Response:', res.status, data);
-                if (data.status === 'success') {
-                    // Sinkronisasi dengan angka valid dari server
-                    syncLikeUI(numId, data.is_liked, data.likes_count);
-                } else {
-                    // Rollback jika server mengembalikan error (misal rate limit)
-                    syncLikeUI(numId, currentLiked, currentCount);
-                    console.warn('[Like] Failed:', data.message);
-                }
-            } catch (err) {
-                console.error('[Like] Fetch error:', err);
-                // Rollback jika terjadi kendala koneksi
-                syncLikeUI(numId, currentLiked, currentCount);
-            } finally {
-                pendingLikesSet.delete(numId);
+            // Simpan status baseline awal sebelum user mulai spam klik
+            if (!initialLikeStates.has(numId)) {
+                initialLikeStates.set(numId, { initialLiked: currentLiked, initialCount: currentCount });
             }
+
+            // 2. INSTANT OPTIMISTIC UI: Layar user langsung berubah tanpa delay 1 milidetik pun!
+            const nextLiked = !currentLiked;
+            const nextCount = nextLiked ? currentCount + 1 : Math.max(0, currentCount - 1);
+            syncLikeUI(numId, nextLiked, nextCount);
+
+            // 3. DEBOUNCE NETWORK REQUEST (350ms): Tahan pengiriman ke server saat user masih spam klik
+            if (likeDebounceTimers.has(numId)) {
+                clearTimeout(likeDebounceTimers.get(numId));
+            }
+
+            const timer = setTimeout(async () => {
+                likeDebounceTimers.delete(numId);
+                const baseline = initialLikeStates.get(numId);
+                initialLikeStates.delete(numId);
+
+                // Dapatkan status akhir setelah user selesai mengetuk
+                let finalLiked = false;
+                const checkBtn = document.querySelector(`[data-thread-like-btn="${numId}"], #threadCardLikeBtn_${numId}`)
+                    || (activeThreadId && parseInt(activeThreadId, 10) === numId ? document.getElementById('opLikeBtn') : null);
+                if (checkBtn) {
+                    finalLiked = checkBtn.classList.contains('liked');
+                } else {
+                    const found = threadsList.find(t => parseInt(t.id, 10) === numId);
+                    if (found) finalLiked = !!found.is_liked;
+                }
+
+                // Jika status akhir SAMA dengan status awal (misal like lalu unlike = kembali ke asal), jangan kirim request apapun ke server!
+                if (baseline && baseline.initialLiked === finalLiked) {
+                    return;
+                }
+
+                // Jika status akhir BERBEDA, kirim tepat 1 request tunggal yang valid ke server
+                try {
+                    const res = await fetch(`/api/blip/threads/${numId}/like`, {
+                        method: 'POST',
+                        headers: getHeaders(),
+                    });
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        syncLikeUI(numId, data.is_liked, data.likes_count);
+                    } else {
+                        // Rollback jika server error
+                        if (baseline) syncLikeUI(numId, baseline.initialLiked, baseline.initialCount);
+                    }
+                } catch (err) {
+                    console.error('[Like Debounce Error]', err);
+                    if (baseline) syncLikeUI(numId, baseline.initialLiked, baseline.initialCount);
+                }
+            }, 350);
+
+            likeDebounceTimers.set(numId, timer);
         }
 
         async function openThreadLikesModal(threadId) {
