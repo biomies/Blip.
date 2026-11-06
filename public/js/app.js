@@ -606,8 +606,14 @@
                 function handleThreadNotification(data) {
                     console.log('[WebSocket] thread.notification event received:', data);
                     
+                    // Sinkronkan badge angka unread langsung dari server jika tersedia (Single Source of Truth)
+                    if (data.unreadCount !== undefined && data.unreadCount !== null) {
+                        unreadThreadNotifsCount = data.unreadCount;
+                    }
+
                     if (data.type === 'thread_unlike') {
                         // User membatalkan like: perbarui notifikasi secara live tanpa toast
+                        updateThreadNotificationBadge();
                         fetchThreadNotifications();
                         // Update angka like di card secara spesifik tanpa me-reload list sidebar!
                         updateSpecificThreadLikeCount(data.threadId, -1);
@@ -616,18 +622,18 @@
 
                     if (data.type === 'thread_reply') {
                         showToast(`💬 ${data.sender?.name || 'Seseorang'} membalas knot Anda: "${data.previewText || ''}"`, 'info');
-                        // Update angka balasan di card secara spesifik tanpa reload
                         updateSpecificThreadReplyCount(data.threadId, 1);
                     } else if (data.type === 'thread_mention') {
                         showToast(`🏷️ ${data.sender?.name || 'Seseorang'} menyebut Anda dalam knot: "${data.previewText || ''}"`, 'info');
                     } else if (data.type === 'thread_like') {
                         showToast(`❤️ ${data.sender?.name || 'Seseorang'} menyukai knot Anda: "${data.previewText || ''}"`, 'info');
-                        // Update angka like di card secara spesifik tanpa me-reload list sidebar!
                         updateSpecificThreadLikeCount(data.threadId, 1);
                     }
 
-                    // Tambah badge unread thread notif
-                    unreadThreadNotifsCount++;
+                    // Jika server tidak melampirkan unreadCount, fallback increment aman
+                    if (data.unreadCount === undefined || data.unreadCount === null) {
+                        unreadThreadNotifsCount++;
+                    }
                     updateThreadNotificationBadge();
 
                     // Perbarui notifikasi list di dropdown secara live

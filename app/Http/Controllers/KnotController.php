@@ -528,6 +528,11 @@ class KnotController extends BaseBlipController
                 ->where('is_read', false)
                 ->delete();
 
+            // Hitung unread riil di database untuk targetUser
+            $realUnread = BlipNotification::where('user_id', $thread->user_id)
+                ->where('is_read', false)
+                ->count();
+
             // Broadcast event un-like agar UI penerima langsung ter-update live tanpa reload
             if ($thread->user_id !== $currentUser->id) {
                 try {
@@ -537,7 +542,9 @@ class KnotController extends BaseBlipController
                         $thread->id,
                         null,
                         Str::limit($thread->content, 80),
-                        $currentUser
+                        $currentUser,
+                        1,
+                        $realUnread
                     ));
                 } catch (\Throwable $e) {}
             }
@@ -568,18 +575,25 @@ class KnotController extends BaseBlipController
                         'preview_text' => Str::limit($thread->content, 80),
                         'is_read' => false,
                     ]);
-
-                    try {
-                        broadcast(new ThreadNotification(
-                            $thread->user_id,
-                            'thread_like',
-                            $thread->id,
-                            null,
-                            Str::limit($thread->content, 80),
-                            $currentUser
-                        ));
-                    } catch (\Throwable $e) {}
                 }
+
+                // Hitung unread riil di database untuk targetUser
+                $realUnread = BlipNotification::where('user_id', $thread->user_id)
+                    ->where('is_read', false)
+                    ->count();
+
+                try {
+                    broadcast(new ThreadNotification(
+                        $thread->user_id,
+                        'thread_like',
+                        $thread->id,
+                        null,
+                        Str::limit($thread->content, 80),
+                        $currentUser,
+                        1,
+                        $realUnread
+                    ));
+                } catch (\Throwable $e) {}
             }
         }
 

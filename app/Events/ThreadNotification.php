@@ -21,8 +21,9 @@ class ThreadNotification implements ShouldBroadcastNow
     public $sender;
     public $createdAtHuman;
     public $groupedCount; // Jumlah orang yang melakukan aksi (misal like) jika belum dibaca
+    public $unreadCount; // Total notifikasi unread riil di database untuk targetUser
 
-    public function __construct(int $targetUserId, string $type, int $threadId, ?int $replyId, ?string $previewText, BlipUser $sender, int $groupedCount = 1)
+    public function __construct(int $targetUserId, string $type, int $threadId, ?int $replyId, ?string $previewText, BlipUser $sender, int $groupedCount = 1, ?int $unreadCount = null)
     {
         $this->targetUserId = $targetUserId;
         $this->type = $type;
@@ -30,6 +31,7 @@ class ThreadNotification implements ShouldBroadcastNow
         $this->replyId = $replyId;
         $this->previewText = $previewText;
         $this->groupedCount = $groupedCount;
+        $this->unreadCount = $unreadCount;
         $this->sender = [
             'id' => $sender->id,
             'name' => $sender->name,
