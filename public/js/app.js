@@ -1684,7 +1684,17 @@
                 filterAndRenderFriends();
 
             } catch (err) {
-                console.error(err);
+                console.error('[LoadFriends Error]', err);
+                // Fallback aman: jika error, jangan biarkan stuck di "Memuat daftar chat..."
+                if (container && (currentTab === 'friends' || currentTab === 'contacts')) {
+                    container.innerHTML = `
+                        <div style="text-align:center; padding: 3rem 1rem; color: var(--text-muted);">
+                            <i class="fa-solid fa-comments" style="font-size: 2.2rem; color: #cbd5e1; margin-bottom: 0.75rem;"></i>
+                            <h4 style="color:var(--text-main); margin-bottom: 0.25rem; font-weight: 700;">Belum Ada Obrolan</h4>
+                            <p style="font-size: 0.85rem;">Pilih teman dari <b>Friend List</b> atau tab <b>Sekitar</b> untuk mulai percakapan.</p>
+                        </div>
+                    `;
+                }
             }
         }
 
