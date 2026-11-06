@@ -1248,7 +1248,7 @@ class BlipController extends Controller
     private function formatDistanceText($dist): string
     {
         if ($dist === null) {
-            return 'Jarak ?';
+            return 'Lokasi tidak aktif';
         }
         if ($dist < 0.05) {
             return '0 m';

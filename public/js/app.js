@@ -720,18 +720,19 @@
             updateProfileAvatarPreview();
         }
 
-        // Otomatis deteksi lokasi browser tanpa tombol manual
+        // Otomatis deteksi lokasi browser tanpa fallback palsu
         function autoDetectLocation() {
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(async (pos) => {
                     await syncCoordinates(pos.coords.latitude, pos.coords.longitude);
                 }, async (err) => {
-                    console.warn('[Geolocation] Browser GPS error/timeout:', err.message);
-                    // Fallback jika ditolak/timeout/lokal: gunakan koordinat default Jakarta Selatan (-6.2538, 106.8206)
-                    if (!currentUser.latitude || !currentUser.longitude) {
-                        await syncCoordinates(-6.2538, 106.8206);
-                    } else {
-                        loadNearbyUsers();
+                    console.warn('[Geolocation] Browser GPS ditolak/error:', err.message);
+                    // Jangan setel koordinat palsu/default jika user menolak.
+                    // Tetap muat tab sesuai state saat ini.
+                    if (currentTab === 'nearby') {
+                        renderNoLocationState();
+                    } else if (currentTab === 'friends') {
+                        loadFriends();
                     }
                 }, { 
                     enableHighAccuracy: true,
@@ -739,12 +740,56 @@
                     timeout: 10000 
                 });
             } else {
-                if (!currentUser.latitude || !currentUser.longitude) {
-                    syncCoordinates(-6.2538, 106.8206);
-                } else {
-                    loadNearbyUsers();
+                if (currentTab === 'nearby') {
+                    renderNoLocationState();
+                } else if (currentTab === 'friends') {
+                    loadFriends();
                 }
             }
+        }
+
+        // Tampilan ramah ketika user belum mengizinkan / menyalakan GPS
+        function renderNoLocationState() {
+            const container = document.getElementById('listContent');
+            if (!container) return;
+            const storiesSection = document.getElementById('nearbyStoriesSection');
+            if (storiesSection) storiesSection.style.display = 'none';
+
+            container.innerHTML = `
+                <div style="text-align:center; padding: 3.5rem 1.5rem; color: var(--text-muted);">
+                    <div style="width: 72px; height: 72px; background: rgba(43, 119, 248, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem;">
+                        <i class="fa-solid fa-location-dot" style="font-size: 2.2rem; color: var(--primary);"></i>
+                    </div>
+                    <h3 style="color:var(--text-main); font-weight: 800; font-size: 1.15rem; margin-bottom: 0.5rem;">Aktifkan Akses Lokasi</h3>
+                    <p style="font-size: 0.88rem; line-height: 1.5; max-width: 290px; margin: 0 auto 1.5rem;">
+                        Blip membutuhkan izin lokasi GPS Anda untuk menemukan orang-orang dan cerita seru di sekitar Anda.
+                    </p>
+                    <button type="button" class="btn btn-primary" onclick="requestGpsPermissionManually()" style="padding: 0.65rem 1.5rem; border-radius: 9999px; font-weight: 700; font-size: 0.9rem; display: inline-flex; align-items: center; gap: 0.5rem; box-shadow: 0 4px 12px rgba(43, 119, 248, 0.25);">
+                        <i class="fa-solid fa-crosshairs"></i> Izinkan Lokasi Saya
+                    </button>
+                </div>
+            `;
+        }
+
+        // Trigger manual saat user menekan tombol 'Izinkan Lokasi Saya'
+        function requestGpsPermissionManually() {
+            if (!navigator.geolocation) {
+                showToast('Browser Anda tidak mendukung deteksi lokasi.', 'warning');
+                return;
+            }
+            showToast('Mencari sinyal GPS Anda...', 'info');
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                await syncCoordinates(pos.coords.latitude, pos.coords.longitude);
+                showToast('Lokasi berhasil diaktifkan!', 'success');
+                loadNearbyUsers(false);
+            }, (err) => {
+                console.error('[Geolocation Error]', err);
+                showToast('Izin lokasi belum diberikan. Mohon aktifkan GPS & izinkan di setelan browser.', 'error');
+            }, {
+                enableHighAccuracy: true,
+                maximumAge: 0,
+                timeout: 10000
+            });
         }
 
         async function syncCoordinates(lat, lon) {
@@ -1377,6 +1422,13 @@
         // Daftar Orang Sekitar dengan Lazy Load (Infinite Scroll)
         async function loadNearbyUsers(isAppend = false) {
             if (currentTab !== 'nearby') return;
+
+            // Jika user saat ini belum memiliki koordinat GPS, jangan cari data kosong tapi tampilkan ajakan izin
+            if (!currentUser.latitude || !currentUser.longitude) {
+                renderNoLocationState();
+                return;
+            }
+
             if (nearbyLoading) return;
             if (isAppend && !nearbyHasMore) return;
 
